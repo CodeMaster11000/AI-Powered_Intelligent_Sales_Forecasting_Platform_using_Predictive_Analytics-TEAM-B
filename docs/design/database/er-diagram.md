@@ -1,96 +1,80 @@
 # ER Diagram
 
-GitHub renders the diagram below directly. A styled export is in `er-diagram.png` / `er-diagram.svg` (source: `er-diagram.dot`, rebuild with `dot -Tpng er-diagram.dot -o er-diagram.png`).
-
-Fields marked `"proposed"` are additions that are **not in the SRS**; see [README.md](README.md) for why each is proposed and which need team sign-off.
+GitHub renders the Mermaid diagram below. A styled export is in `er-diagram.png` / `er-diagram.svg`
+(sources: `er-diagram.mmd`, `er-diagram.dot`; rebuild the image with `dot -Tpng er-diagram.dot -o er-diagram.png`).
 
 ![ER diagram](er-diagram.png)
 
 ```mermaid
 erDiagram
-    USERS ||--o{ LEADS : "owns (proposed)"
-    USERS ||--o{ SALES_ANALYTICS : "has"
+    USERS ||--o{ LEADS : owns
+    USERS ||--o{ OUTREACH_EMAILS : writes
+    USERS ||--o{ INTERACTIONS : logs
     LEADS ||--o{ LEAD_SCORES : "scored over time"
-    LEADS ||--o{ COMPANY_INSIGHTS : "analyzed over time"
-    LEADS ||--o{ SALES_INTERACTIONS : "has"
-    LEADS ||--o{ OUTREACH_CAMPAIGNS : "receives"
-    LEADS ||--o{ CRM_SYNC_LOGS : "audited by"
+    LEADS ||--o| COMPANY_INSIGHTS : "profiled by"
+    LEADS ||--o{ OUTREACH_EMAILS : receives
+    LEADS ||--o{ INTERACTIONS : has
 
     USERS {
-        bigint user_id PK
+        bigint id PK
         text name
         text email UK
         text role
-        text department
         timestamptz created_at
     }
     LEADS {
-        bigint lead_id PK
-        bigint owner_user_id FK "proposed"
+        bigint id PK
+        bigint owner_id FK
         text company_name
         text industry
         text contact_name
-        text contact_title "proposed"
+        text contact_title
         text email UK
         text phone
-        text lead_status "5 lifecycle stages"
-        text source "proposed: 5 ingestion vectors"
-        text company_size "proposed"
-        text annual_revenue "proposed"
-        text funding_stage "proposed"
-        text funding_raised "proposed"
-        text location "proposed"
-        jsonb tech_stack "proposed"
+        text company_size
+        text location
+        text funding_stage
+        jsonb tech_stack
+        text stage
+        text source
         timestamptz created_at
-        timestamptz updated_at "proposed"
-    }
-    COMPANY_INSIGHTS {
-        bigint insight_id PK
-        bigint lead_id FK
-        text business_needs
-        text opportunities
-        text industry_analysis
-        int qualification_score "proposed"
-        text growth_indicators "proposed"
-        text tech_alignment "proposed"
-        text decision_maker_summary "proposed"
-        timestamptz generated_at
+        timestamptz updated_at
     }
     LEAD_SCORES {
-        bigint score_id PK
+        bigint id PK
         bigint lead_id FK
-        int lead_score
-        numeric conversion_probability
-        timestamptz generated_at
-    }
-    SALES_INTERACTIONS {
-        bigint interaction_id PK
-        bigint lead_id FK
-        text interaction_type
-        text summary
-        text action_items
-        timestamptz interaction_date
-    }
-    OUTREACH_CAMPAIGNS {
-        bigint campaign_id PK
-        bigint lead_id FK
-        text email_subject
-        text email_content
-        text campaign_status
+        int score
+        text priority
+        jsonb factors
+        text reason
         timestamptz created_at
     }
-    CRM_SYNC_LOGS {
-        bigint sync_id PK
+    COMPANY_INSIGHTS {
+        bigint id PK
         bigint lead_id FK
-        text crm_platform
-        text sync_status
-        timestamptz timestamp
+        text summary
+        text opportunities
+        text pain_points
+        timestamptz created_at
     }
-    SALES_ANALYTICS {
-        bigint analytics_id PK
+    OUTREACH_EMAILS {
+        bigint id PK
+        bigint lead_id FK
         bigint user_id FK
-        numeric conversion_rate
-        numeric pipeline_value
-        timestamptz generated_at
+        text subject
+        text body
+        text status
+        timestamptz created_at
+    }
+    INTERACTIONS {
+        bigint id PK
+        bigint lead_id FK
+        bigint user_id FK
+        text type
+        timestamptz occurred_at
+        text raw_notes
+        text summary
+        jsonb action_items
+        timestamptz created_at
     }
 ```
