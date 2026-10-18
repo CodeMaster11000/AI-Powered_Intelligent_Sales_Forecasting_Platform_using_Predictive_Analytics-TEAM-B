@@ -1,124 +1,111 @@
 # Data Dictionary
 
-Source: SRS section 2.4. **Bold + "proposed"** = not in the SRS
-Types are Postgres design-level types, not final. Column names use snake_case; table names are lowercase plural (`users`, `leads`, ...).
+Conventions: table and column names are lowercase snake_case; primary keys are `bigint` identity columns named `id`; all timestamps are `timestamptz` (UTC). "Null: no" means the column is required.
+Milestone tags: **M1** built first, **M2**/**M3** later.
 
-Conventions to agree on and then keep identical everywhere:
-- Primary keys: `bigint` generated identity (simple, fast, easy to read in logs)
-- All timestamps: `timestamptz` (store UTC)
-- Status-like text columns: restrict to allowed values (see "Allowed values" below)
-
----
-
-## users (Milestone 1)
+## users (M1)
 | Column | Type | Null | Notes |
 |--------|------|------|-------|
-| user_id | bigint | no | PK |
+| id | bigint | no | PK |
 | name | text | no | |
 | email | text | no | unique |
-| role | text | no | allowed values below |
-| department | text | yes | |
+| role | text | no | `rep`, `manager`, `admin` |
 | created_at | timestamptz | no | default now |
 
-## leads (Milestone 1)
+## leads (M1)
+One row per prospect (a company plus its main contact).
+
 | Column | Type | Null | Notes |
 |--------|------|------|-------|
-| lead_id | bigint | no | PK |
-| **owner_user_id** (proposed) | bigint | yes | FK users.user_id. Needed for REQ "reps see only assigned leads" (SRS 2.3) |
+| id | bigint | no | PK |
+| owner_id | bigint | yes | FK users.id, the rep who owns the lead; on user delete set null |
 | company_name | text | no | |
 | industry | text | yes | |
 | contact_name | text | yes | |
-| **contact_title** (proposed) | text | yes | Needed for decision-maker alignment (REQ-M2-03, REQ-M4-02) |
-| email | text | no | unique (dedupe rule, see README open question 2) |
+| contact_title | text | yes | used to judge decision-maker level when scoring |
+| email | text | no | unique; the duplicate check on import |
 | phone | text | yes | |
-| lead_status | text | no | one of the 5 stages; default `New Leads` (REQ-M1-03) |
-| **source** (proposed) | text | no | which ingestion vector: CRM, Website Form, LinkedIn, Sales Entry, CSV (REQ-M1-02) |
-| **company_size** (proposed) | text | yes | e.g. `250-500` (REQ-M1-02) |
-| **annual_revenue** (proposed) | text | yes | e.g. `$45M-$60M` (REQ-M1-02) |
-| **funding_stage** (proposed) | text | yes | e.g. `Series C` |
-| **funding_raised** (proposed) | text | yes | e.g. `$28M` |
-| **location** (proposed) | text | yes | e.g. `San Francisco, CA` |
-| **tech_stack** (proposed) | jsonb | yes | list of strings, e.g. AWS, Python, PostgreSQL |
+| company_size | text | yes | e.g. `250-500` |
+| location | text | yes | |
+| funding_stage | text | yes | e.g. `Series C` |
+| tech_stack | jsonb | yes | list of strings, e.g. `["AWS","Python"]` |
+| stage | text | no | pipeline stage, default `new` |
+| source | text | no | how it entered the system, default `csv` |
 | created_at | timestamptz | no | default now |
-| **updated_at** (proposed) | timestamptz | no | for audit and "last changed" display |
+| updated_at | timestamptz | no | refreshed on every change |
 
-## company_insights (Milestone 1)
+## lead_scores (M1)
+Every score a lead has ever had. The current score is the newest row.
+
 | Column | Type | Null | Notes |
 |--------|------|------|-------|
-| insight_id | bigint | no | PK |
-| lead_id | bigint | no | FK leads.lead_id |
-| business_needs | text | yes | |
-| opportunities | text | yes | the flagged opportunities (ERP Modernization, Cloud Migration, Process Automation, Digital Transformation; REQ-M2-02) |
-| industry_analysis | text | yes | |
-| **qualification_score** (proposed) | int | yes | 0-100; REQ-M2-03 outputs this (e.g. 92). Different from Lead_Scores (Module 4) |
-| **growth_indicators** (proposed) | text | yes | High Growth Potential signals (REQ-M2-03) |
-| **tech_alignment** (proposed) | text | yes | Tech Alignment metrics (REQ-M2-03) |
-| **decision_maker_summary** (proposed) | text | yes | Decision Maker identification (REQ-M2-03) |
-| generated_at | timestamptz | no | default now |
-
-## lead_scores (Milestone 2)
-| Column | Type | Null | Notes |
-|--------|------|------|-------|
-| score_id | bigint | no | PK |
-| lead_id | bigint | no | FK leads.lead_id |
-| lead_score | int | no | 0-100 |
-| conversion_probability | numeric | no | percentage, e.g. 78 |
-| generated_at | timestamptz | no | history is kept, newest row = current score |
-
-## outreach_campaigns (Milestone 2)
-| Column | Type | Null | Notes |
-|--------|------|------|-------|
-| campaign_id | bigint | no | PK |
-| lead_id | bigint | no | FK leads.lead_id |
-| email_subject | text | yes | |
-| email_content | text | yes | |
-| campaign_status | text | no | e.g. draft, sent (values decided in Milestone 2) |
+| id | bigint | no | PK |
+| lead_id | bigint | no | FK leads.id, on lead delete cascade |
+| score | int | no | 0 to 100 |
+| priority | text | no | `hot`, `warm`, `cold` |
+| factors | jsonb | yes | breakdown of why, e.g. `{"company_growth": 25, "industry_match": 22}` |
+| reason | text | no | what triggered it: `csv_import`, `manual_rescore`, `call_logged`... |
 | created_at | timestamptz | no | default now |
 
-## sales_interactions (Milestone 3)
+## company_insights (M1)
+One profile per lead; regenerating overwrites it.
+
 | Column | Type | Null | Notes |
 |--------|------|------|-------|
-| interaction_id | bigint | no | PK |
-| lead_id | bigint | no | FK leads.lead_id |
-| interaction_type | text | no | call, meeting, email... |
-| summary | text | yes | |
-| action_items | text | yes | assignee + due date per item (REQ-M5-02); may need its own table later |
-| interaction_date | timestamptz | no | |
+| id | bigint | no | PK |
+| lead_id | bigint | no | FK leads.id, **unique** (one per lead), on lead delete cascade |
+| summary | text | yes | short company overview |
+| opportunities | text | yes | where the product could fit |
+| pain_points | text | yes | likely problems the company has |
+| created_at | timestamptz | no | refreshed when regenerated |
 
-## crm_sync_logs (Milestone 3)
+## outreach_emails (M2)
 | Column | Type | Null | Notes |
 |--------|------|------|-------|
-| sync_id | bigint | no | PK |
-| lead_id | bigint | no | FK leads.lead_id |
-| crm_platform | text | no | Salesforce, HubSpot |
-| sync_status | text | no | |
-| timestamp | timestamptz | no | |
+| id | bigint | no | PK |
+| lead_id | bigint | no | FK leads.id, on lead delete cascade |
+| user_id | bigint | yes | FK users.id, who generated it; on user delete set null |
+| subject | text | no | |
+| body | text | no | |
+| status | text | no | `draft`, `sent`; default `draft` |
+| created_at | timestamptz | no | default now |
 
-(REQ-M5-03 also wants log types such as Contact / Activity / Deal Stage / Task; consider an `event_type` column when Milestone 3 starts.)
+## interactions (M3)
+Calls, meetings and notes with a lead.
 
-## sales_analytics (Milestone 4)
 | Column | Type | Null | Notes |
 |--------|------|------|-------|
-| analytics_id | bigint | no | PK |
-| user_id | bigint | no | FK users.user_id |
-| conversion_rate | numeric | yes | |
-| pipeline_value | numeric | yes | |
-| generated_at | timestamptz | no | |
+| id | bigint | no | PK |
+| lead_id | bigint | no | FK leads.id, on lead delete cascade |
+| user_id | bigint | yes | FK users.id, who logged it; on user delete set null |
+| type | text | no | `call`, `meeting`, `email_reply`, `note` |
+| occurred_at | timestamptz | no | when it happened |
+| raw_notes | text | yes | pasted transcript or notes |
+| summary | text | yes | generated summary |
+| action_items | jsonb | yes | list of `{task, owner, due_date}` |
+| created_at | timestamptz | no | default now |
 
 ---
 
-## Allowed values
-- **users.role**: Sales Representative, BDR, Sales Manager, RevOps (SRS 2.3)
-- **leads.lead_status**: New Leads, Qualified, Proposal, Negotiation, Closed Won (REQ-M1-03)
-- **leads.source**: CRM, Website Form, LinkedIn, Sales Entry, CSV (REQ-M1-02)
+## Allowed values (enforce with database checks)
+- **leads.stage**: `new`, `qualified`, `proposal`, `negotiation`, `won`, `lost`
+- **leads.source**: `csv`, `manual`
+- **lead_scores.priority**: `hot`, `warm`, `cold`
+- **lead_scores.score**: 0 to 100 inclusive
+- **users.role**: `rep`, `manager`, `admin`
+- **outreach_emails.status**: `draft`, `sent`
+- **interactions.type**: `call`, `meeting`, `email_reply`, `note`
 
 ## Relationships
 | Parent | Child | Cardinality | On parent delete |
 |--------|-------|-------------|------------------|
-| users | leads (owner_user_id) | 1 : N (proposed) | set null |
-| users | sales_analytics | 1 : N | cascade or restrict (decide) |
+| users | leads (owner_id) | 1 : N | set null |
+| users | outreach_emails (user_id) | 1 : N | set null |
+| users | interactions (user_id) | 1 : N | set null |
 | leads | lead_scores | 1 : N | cascade |
-| leads | company_insights | 1 : N | cascade |
-| leads | sales_interactions | 1 : N | cascade |
-| leads | outreach_campaigns | 1 : N | cascade |
-| leads | crm_sync_logs | 1 : N | cascade (or keep, audit logs may need to survive) |
+| leads | company_insights | 1 : 1 | cascade |
+| leads | outreach_emails | 1 : N | cascade |
+| leads | interactions | 1 : N | cascade |
+
+## Indexes
+Index every foreign key column (`owner_id`, `lead_id`, `user_id`), plus `leads.stage` and `lead_scores (lead_id, created_at)` so "latest score per lead" is fast. `leads.email` and `users.email` are already indexed by their unique constraints.
