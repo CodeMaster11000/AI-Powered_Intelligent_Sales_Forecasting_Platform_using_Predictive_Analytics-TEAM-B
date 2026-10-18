@@ -1,75 +1,101 @@
+
 # Setup Guide
 
 Pick your operating system: [Linux](#linux-ubuntu--debian) | [macOS](#macos) | [Windows](#windows-10--11). Then continue with [Running the project](#running-the-project) and [Troubleshooting](#troubleshooting).
 
-**What you will have at the end:** Python virtual environment with all packages, PostgreSQL running in Docker, and the API and UI running locally.
+**What you will have at the end:** A Python virtual environment with the project dependencies installed, PostgreSQL running in Docker, and the API and UI ready to run locally.
 
-Why Docker for the database: everyone gets the identical PostgreSQL version and settings on any OS, and nobody installs or configures Postgres by hand.
+Docker is used for the database so everyone gets the same PostgreSQL setup without installing or configuring PostgreSQL manually.
 
 ---
 
 ## Linux (Ubuntu / Debian)
 
 ### 1. Install tools
+
 ```bash
 sudo apt update
 sudo apt install -y python3 python3-venv python3-pip git curl
 ```
+
 Install Docker Engine and the Compose plugin:
+
 ```bash
 curl -fsSL https://get.docker.com | sh
 sudo usermod -aG docker $USER
-newgrp docker          # or log out and back in
+newgrp docker
 ```
-Check:
+
+Check the installations:
+
 ```bash
-python3 --version      # 3.11 or 3.12 recommended
+python3 --version
 git --version
 docker --version
 docker compose version
 ```
 
+Python 3.11 or 3.12 is recommended.
+
 ### 2. Get the code
+
 ```bash
-git clone <repo-url> salesgenie-ai
+git clone https://github.com/CodeMaster11000/AI-Powered_Intelligent_Sales_Forecasting_Platform_using_Predictive_Analytics-TEAM-B.git salesgenie-ai
 cd salesgenie-ai
+```
+
+Configure Git if you have not already done so:
+
+```bash
 git config --global user.name "Your Name"
 git config --global user.email "you@example.com"
 ```
 
-### 3. Python environment
+### 3. Set up Python
+
 ```bash
 python3 -m venv venv
-source venv/bin/activate        # you should now see (venv) in your prompt
+source venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements-dev.txt
 ```
 
-### 4. Configuration
+### 4. Configure environment variables
+
 ```bash
 cp .env.example .env
 ```
 
 ### 5. Start the database
+
 ```bash
-docker compose up -d
-docker compose ps               # STATUS should become "healthy"
+docker compose up -d db
+docker compose ps
 ```
-Continue at [Running the project](#running-the-project).
+
+Wait until the database is healthy.
+
+Follow the [Database Setup Guide](backend/database/SETUP.md) to initialize the database schema.
+
+Continue to [Running the project](#running-the-project).
 
 ---
 
 ## macOS
 
 ### 1. Install tools
-Install Homebrew first if you don't have it (https://brew.sh), then:
+
+Install [Homebrew](https://brew.sh) if you do not already have it.
+
 ```bash
 brew install python@3.12 git
 brew install --cask docker
 ```
-Open **Docker Desktop** once from Applications and wait until it says it is running. Apple Silicon and Intel both work; the Postgres image supports both.
 
-Check:
+Open Docker Desktop from Applications and wait until it is running.
+
+Check the installations:
+
 ```bash
 python3 --version
 git --version
@@ -78,14 +104,21 @@ docker compose version
 ```
 
 ### 2. Get the code
+
 ```bash
-git clone <repo-url> salesgenie-ai
+git clone https://github.com/CodeMaster11000/AI-Powered_Intelligent_Sales_Forecasting_Platform_using_Predictive_Analytics-TEAM-B.git salesgenie-ai
 cd salesgenie-ai
+```
+
+Configure Git if needed:
+
+```bash
 git config --global user.name "Your Name"
 git config --global user.email "you@example.com"
 ```
 
-### 3. Python environment
+### 3. Set up Python
+
 ```bash
 python3 -m venv venv
 source venv/bin/activate
@@ -93,31 +126,44 @@ pip install --upgrade pip
 pip install -r requirements-dev.txt
 ```
 
-### 4. Configuration
+### 4. Configure environment variables
+
 ```bash
 cp .env.example .env
 ```
 
 ### 5. Start the database
+
 ```bash
-docker compose up -d
-docker compose ps               # STATUS should become "healthy"
+docker compose up -d db
+docker compose ps
 ```
-Continue at [Running the project](#running-the-project).
+
+Wait until the database is healthy.
+
+Follow the [Database Setup Guide](backend/database/SETUP.md) to initialize the database schema.
+
+Continue to [Running the project](#running-the-project).
 
 ---
 
 ## Windows 10 / 11
 
-Use **PowerShell** (not the old cmd) for everything below.
+Use PowerShell for the commands below.
 
 ### 1. Install tools
-1. **Python 3.12**: https://www.python.org/downloads/ . On the first installer screen tick **"Add python.exe to PATH"**, then Install Now.
-2. **Git**: https://git-scm.com/download/win (defaults are fine).
-3. **Docker Desktop**: https://www.docker.com/products/docker-desktop/ . Accept the WSL 2 option if asked, restart if prompted, then open Docker Desktop and wait until it says it is running.
-4. **VS Code** (optional): https://code.visualstudio.com/ with the Python extension.
+
+Install the following:
+
+1. **Python 3.12:** https://www.python.org/downloads/  
+   Enable "Add python.exe to PATH" during installation.
+2. **Git:** https://git-scm.com/download/win
+3. **Docker Desktop:** https://www.docker.com/products/docker-desktop/  
+   Enable WSL 2 if prompted, restart if required, and open Docker Desktop.
+4. **VS Code (optional):** https://code.visualstudio.com/
 
 Close and reopen PowerShell, then check:
+
 ```powershell
 python --version
 git --version
@@ -126,102 +172,166 @@ docker compose version
 ```
 
 ### 2. Get the code
+
 ```powershell
-git clone <repo-url> salesgenie-ai
+git clone https://github.com/CodeMaster11000/AI-Powered_Intelligent_Sales_Forecasting_Platform_using_Predictive_Analytics-TEAM-B.git salesgenie-ai
 cd salesgenie-ai
+```
+
+Configure Git if needed:
+
+```powershell
 git config --global user.name "Your Name"
 git config --global user.email "you@example.com"
 ```
 
-### 3. Python environment
+### 3. Set up Python
+
 ```powershell
 python -m venv venv
 .\venv\Scripts\Activate.ps1
 ```
-If PowerShell refuses with an "execution policy" error, run this once and retry:
+
+If PowerShell blocks activation because of the execution policy, run:
+
 ```powershell
 Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 ```
-You should see `(venv)` in your prompt. Then:
+
+Activate the environment again, then install dependencies:
+
 ```powershell
 python -m pip install --upgrade pip
 pip install -r requirements-dev.txt
 ```
 
-### 4. Configuration
+### 4. Configure environment variables
+
 ```powershell
 Copy-Item .env.example .env
 ```
 
 ### 5. Start the database
+
 ```powershell
-docker compose up -d
-docker compose ps               # STATUS should become "healthy"
+docker compose up -d db
+docker compose ps
 ```
-Continue at [Running the project](#running-the-project).
+
+Wait until the database is healthy.
+
+Follow the [Database Setup Guide](backend/database/SETUP.md) to initialize the database schema.
+
+Continue to [Running the project](#running-the-project).
 
 ---
 
 ## Running the project
 
-Run from the repository root with the virtual environment active. Use two terminals.
+Run all commands from the repository root with the Python virtual environment activated.
 
-**Terminal 1: API**
-```
+Use separate terminals for the API and UI.
+
+### Terminal 1: API
+
+```bash
 uvicorn backend.main:app --reload
 ```
-Docs at http://localhost:8000/docs
 
-**Terminal 2: UI**
-```
+API documentation: http://localhost:8000/docs
+
+### Terminal 2: UI
+
+```bash
 streamlit run frontend/app.py
 ```
-UI at http://localhost:8501
 
-> The two commands above only work once `backend/main.py` and `frontend/app.py` contain an app. Until then, the database check below is how you confirm your setup.
+UI: http://localhost:8501
+
+The API and UI commands require their respective application files to be implemented.
 
 ### Checking the database
-```
+
+To open a PostgreSQL shell:
+
+```bash
 docker compose exec db psql -U salesgenie -d salesgenie
 ```
-Inside: `\dt` lists tables, `\d leads` describes a table, `\q` quits. (Use the user and database names from your `.env` if you changed them.)
 
-Optional visual browser (pgAdmin):
+Inside the shell:
+
+- `\dt` lists tables.
+- `\d leads` describes the `leads` table.
+- `\q` exits PostgreSQL.
+
+For database initialization and schema changes, see the [Database Setup Guide](backend/database/SETUP.md).
+
+### Optional: pgAdmin
+
+If pgAdmin is configured in the Compose file, start it with:
+
+```bash
+docker compose --profile tools up -d pgadmin
 ```
-docker compose --profile tools up -d
-```
-Open http://localhost:5050, log in with `admin@salesgenie.dev` / `admin`, and add a server with host `db`, port `5432`, and the user/password from `.env`.
+
+Open http://localhost:5050 and sign in using the credentials configured in your Compose setup.
 
 ### Every session
-1. `cd` into the project and activate the venv
-2. `docker compose up -d`
-3. Start the API and the UI
+
+1. Open a terminal in the repository root.
+2. Activate the Python virtual environment.
+3. Start the required services:
+
+   ```bash
+   docker compose up -d
+   ```
+
+4. Start the API and UI in separate terminals when they are ready.
+
+You only need to initialize the database schema once, or when new migrations have been added. See the [Database Setup Guide](backend/database/SETUP.md).
 
 ### Stopping and resetting
-| Goal | Command |
-|------|---------|
-| Stop the database, keep data | `docker compose down` |
-| **Wipe all data** (clean demo / fresh start) | `docker compose down -v` then `docker compose up -d` |
-| See database logs | `docker compose logs -f db` |
 
-### Optional: AI packages (later milestones)
-```
+| Goal | Command |
+|---|---|
+| Stop containers and keep database data | `docker compose down` |
+| Stop containers and delete database volumes | `docker compose down -v` |
+| View database logs | `docker compose logs -f db` |
+
+**Warning:** `docker compose down -v` deletes associated volumes and can permanently remove your database data.
+
+### Optional: AI packages
+
+If a later milestone requires AI dependencies:
+
+```bash
 pip install -r requirements-ai.txt
 ```
-Then put your key in `.env` as `OPENAI_API_KEY`. Never commit `.env`.
+
+Add your API key to `.env` if required:
+
+```ini
+OPENAI_API_KEY=your-api-key
+```
+
+Never commit `.env` or API keys to Git.
 
 ---
 
 ## Troubleshooting
 
 | Problem | Fix |
-|---------|-----|
-| `port is already allocated` / port 5432 in use | A local Postgres is running. Stop it (Linux: `sudo systemctl stop postgresql`), or set `DB_PORT=5433` in `.env` **and** change the port in `DATABASE_URL` to match, then `docker compose up -d` again. |
-| `docker: permission denied` (Linux) | You skipped `usermod -aG docker $USER`; run it, then log out and in. |
-| `Cannot connect to the Docker daemon` | Docker Desktop (Windows/macOS) isn't running, or on Linux run `sudo systemctl start docker`. |
-| Database stays "starting" or "unhealthy" | `docker compose logs db`. If you changed the password in `.env` after the first start, run `docker compose down -v` once so the volume is recreated. |
-| `python` not found (Windows) | Reinstall Python with "Add to PATH" ticked, reopen PowerShell. |
-| `python` not found (Linux/macOS) | Use `python3`. Inside an activated venv, `python` works too. |
-| `No module named ...` | The venv isn't active (no `(venv)` in the prompt) or the install didn't finish. Activate, then `pip install -r requirements-dev.txt`. |
-| `Address already in use` on 8000 / 8501 | Another instance is running. Stop it, or use `--port 8001` (uvicorn) / `--server.port 8502` (streamlit). |
-| Weird "whole file changed" diffs | Line-ending mismatch. `.gitattributes` forces LF; run `git add --renormalize .` once. |
+|---|---|
+| `port is already allocated` | Another process is using the port. Stop the conflicting process or configure a different host port in `.env`. |
+| `docker: permission denied` on Linux | Check Docker group permissions and log out and back in if necessary. |
+| Cannot connect to Docker | Start Docker Desktop on Windows/macOS or start the Docker service on Linux. |
+| Database is unhealthy | Run `docker compose logs db` and check the database configuration. |
+| `python` not found on Windows | Reinstall Python with "Add to PATH" enabled, then reopen PowerShell. |
+| `python` not found on Linux/macOS | Use `python3` outside the virtual environment. |
+| `No module named ...` | Activate the virtual environment and install the project dependencies. |
+| Port 8000 or 8501 is already in use | Stop the other process or configure a different API/UI port. |
+| Database tables are missing | Follow the [Database Setup Guide](backend/database/SETUP.md) and apply pending migrations. |
+
+---
+
+For database-specific instructions, see [`backend/database/SETUP.md`](backend/database/SETUP.md).
