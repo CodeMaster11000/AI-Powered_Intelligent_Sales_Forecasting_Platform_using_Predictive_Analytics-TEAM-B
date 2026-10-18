@@ -1,0 +1,36 @@
+# Reads values from .env automatically; falls back to dev defaults if .env is missing.
+services:
+  db:
+    image: postgres:16
+    container_name: salesgenie-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-salesgenie}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-salesgenie_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-salesgenie}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-salesgenie} -d ${POSTGRES_DB:-salesgenie}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Optional DB browser UI: docker compose --profile tools up -d  ->  http://localhost:5050
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: salesgenie-pgadmin
+    profiles: ["tools"]
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@salesgenie.dev
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
