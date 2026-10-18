@@ -1,0 +1,13 @@
+# Core runtime dependencies (Milestone 1)
+fastapi
+uvicorn[standard]
+sqlalchemy
+psycopg2-binary
+alembic
+python-dotenv
+pydantic
+python-multipart
+httpx
+requests
+pandas
+streamlit

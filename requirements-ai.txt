@@ -1,0 +1,6 @@
+# Install only when the AI milestones begin (outreach, agents):
+#   pip install -r requirements-ai.txt
+-r requirements.txt
+openai
+langchain
+langgraph
