@@ -3,7 +3,8 @@
 > **Infosys Batch-4 Capstone Project**  
 > **Standard Compliance**: IEEE Std 830-1998  
 > **Milestone 1 Status**: COMPLETED & VERIFIED (Day 8 / Day 9 Checkpoint — 19-Oct-2026)  
-> **AI/ML Engineer**: Jayant Vaibhav
+> **AI/ML Engineer**: Jayant Vaibhav  
+> **GitHub Repository**: [https://github.com/jayantvaibhavspj/AI-Powered-Intelligent-Sales-Forecasting-Platform-using-Predictive-Analytics](https://github.com/jayantvaibhavspj/AI-Powered-Intelligent-Sales-Forecasting-Platform-using-Predictive-Analytics)
 
 ---
 
