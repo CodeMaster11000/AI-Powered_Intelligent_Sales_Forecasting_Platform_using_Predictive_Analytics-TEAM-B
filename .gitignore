@@ -1,5 +1,24 @@
-venv/
-.env
+# Byte-compiled / optimized / DLL files
 __pycache__/
+*.py[cod]
+*$py.class
 *.pyc
+
+# Database
+*.db
+*.sqlite3
+
+# Environment variables
+.env
+
+# Virtual Environment
+venv/
+env/
+.venv/
+
+# Pytest / Cache
 .pytest_cache/
+.coverage
+
+# Streamlit
+.streamlit/

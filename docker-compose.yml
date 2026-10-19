@@ -1,4 +1,5 @@
-# Reads values from .env automatically; falls back to dev defaults if .env is missing.
+version: '3.8'
+
 services:
   db:
     image: postgres:16
@@ -18,7 +19,23 @@ services:
       timeout: 3s
       retries: 10
 
-  # Optional DB browser UI: docker compose --profile tools up -d  ->  http://localhost:5050
+  salesgenie-app:
+    build: .
+    container_name: salesgenie_ai_platform
+    ports:
+      - "8000:8000"
+      - "8501:8501"
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-postgresql://salesgenie:salesgenie_dev@db:5432/salesgenie}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    volumes:
+      - .:/app
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: salesgenie-pgadmin

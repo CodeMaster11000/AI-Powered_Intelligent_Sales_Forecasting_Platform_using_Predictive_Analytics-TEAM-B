@@ -1,14 +1,27 @@
 # Core runtime dependencies (Milestone 1)
-fastapi
+fastapi>=0.115.0
 uvicorn[standard]
-sqlalchemy
+sqlalchemy>=2.0.25
 psycopg2-binary
 psycopg[binary] 
 alembic
 python-dotenv
-pydantic
+pydantic>=2.9.0
+pydantic-settings
 python-multipart
 httpx
 requests
 pandas
-streamlit
+streamlit>=1.31.0
+altair
+plotly
+
+# AI & Multi-Agent Frameworks (Jayant Vaibhav - AI/ML Layer)
+google-generativeai>=0.8.0
+openai>=1.12.0
+langgraph>=0.0.26
+langchain-core>=0.1.28
+langchain>=0.1.9
+
+# Testing & Quality Assurance
+pytest
