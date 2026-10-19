@@ -1,0 +1,10 @@
+lead_id,company_name,industry,contact_name,email,phone,company_size,annual_revenue,funding_stage,capital_raised,location,tech_stack,lead_status
+1,TechCorp Solutions,Enterprise Software,Sarah Johnson,sarah.johnson@techcorp.com,+1-415-555-0192,250-500 employees,$45M-$60M,Series C,$28M,San Francisco CA,"AWS, Python, React, Node.js, Kubernetes, PostgreSQL",Qualified
+2,DataFlow Inc,Big Data & Analytics,Marcus Vance,marcus.vance@dataflow.io,+1-212-555-0144,100-250 employees,$20M-$35M,Series C,$32M,New York NY,"GCP, Python, Spark, Kafka, Snowflake, Airflow",Qualified
+3,CloudNine Technologies,Cloud Infrastructure,Elena Rostova,elena.rostova@cloudnine.net,+1-206-555-0188,50-100 employees,$12M-$18M,Series B,$15M,Seattle WA,"Azure, C#, .NET, Docker, Terraform, Redis",Qualified
+4,Acme Corp,Traditional Manufacturing,Robert Miller,robert.miller@acmeparts.com,+1-312-555-0120,500-1000 employees,$80M-$120M,Bootstrapped,N/A,Chicago IL,"On-Premises Windows Server, Oracle DB, Legacy SAP ERP",New Leads
+5,TechStart Inc,FinTech & Payments,Priya Sharma,priya.sharma@techstart.io,+1-650-555-0167,20-50 employees,$5M-$8M,Seed,$3.5M,Palo Alto CA,"AWS, Go, React Native, Postgres, Stripe API",New Leads
+6,Global Systems,Telecommunications & IT,David Chen,david.chen@globalsystems.com,+1-408-555-0199,1000+ employees,$150M-$250M,Public,N/A,Austin TX,"Hybrid Cloud, Java, Spring Boot, Oracle, Kubernetes",New Leads
+7,InnovateAI,Artificial Intelligence,Lisa Wang,lisa.wang@innovateai.com,+1-617-555-0133,80-150 employees,$15M-$25M,Series B,$20M,Boston MA,"AWS, PyTorch, FastAPI, MongoDB, Vector DB, Next.js",Proposal
+8,FutureTech Solutions,Enterprise IT & Cloud,Alex Mercer,alex.mercer@futuretech.io,+1-720-555-0112,150-300 employees,$30M-$45M,Series B,$18M,Denver CO,"AWS, Node.js, GraphQL, PostgreSQL, Microservices",Negotiation
+9,NexGen Systems,Healthcare SaaS,Michael Scott,michael.scott@nexgensys.com,+1-919-555-0177,300-600 employees,$60M-$90M,Series C,$40M,Raleigh NC,"AWS, HIPAA-compliant Cloud, Python, React, PostgreSQL",Closed Won

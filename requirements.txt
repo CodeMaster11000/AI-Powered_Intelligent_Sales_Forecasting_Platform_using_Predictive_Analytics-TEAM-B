@@ -1,0 +1,31 @@
+# SalesGenie AI Platform - Core Dependencies
+# Python 3.10+
+
+# Microservice & Web Frameworks
+fastapi==0.109.0
+uvicorn==0.27.0
+pydantic==2.5.3
+pydantic-settings>=2.1.0
+python-multipart==0.0.6
+python-dotenv==1.0.0
+
+# AI & LLM Multi-Agent Frameworks (Jayant's AI Stack)
+google-generativeai>=0.8.0
+openai>=1.12.0
+langgraph>=0.0.26
+langchain-core>=0.1.28
+langchain>=0.1.9
+
+# Database & Data Processing
+SQLAlchemy==2.0.25
+pandas==2.1.4
+requests==2.31.0
+
+# Presentation Layer (Streamlit Dashboard)
+streamlit>=1.31.0
+altair<5.0.0
+plotly>=5.18.0
+
+# Testing & Quality Assurance
+pytest==9.0.2
+httpx>=0.26.0

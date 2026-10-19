@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  salesgenie-app:
+    build: .
+    container_name: salesgenie_ai_platform
+    ports:
+      - "8000:8000"
+      - "8501:8501"
+    environment:
+      - DATABASE_URL=sqlite:///./salesgenie.db
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    volumes:
+      - .:/app
+    restart: unless-stopped
