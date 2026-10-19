@@ -22,7 +22,8 @@ As of **Day 8 (Milestone 1 Checkpoint)**, the complete end-to-end implementation
 | 1 | Project Lead & DevOps | Ekansh Agnihotri | Sprint Planning, PostgreSQL Database, CI/CD |
 | 2 | Backend Developer | Varshitha Kota | FastAPI endpoints, CRUD APIs, Integration Layer |
 | 3 | **AI/ML Engineer** | **Jayant Vaibhav** | **LangGraph Multi-Agent Engine, Module 2 (Lead Intelligence), Module 3 (Outreach), Module 4 (Scoring), Module 5 (Summarization)** |
-| 4 | QA / Test Engineer | Devendra Bisne | Test Suites, Acceptance Benchmarks, UAT |
+| 4 | Frontend Developer | | Streamlit UI, Dashboard Components, Theming & CSS |
+| 5 | QA / Test Engineer | Devendra Bisne | Test Suites, Acceptance Benchmarks, UAT |
 
 ---
 
