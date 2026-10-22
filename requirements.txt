@@ -12,3 +12,4 @@ httpx
 requests
 pandas
 streamlit
+email-validator

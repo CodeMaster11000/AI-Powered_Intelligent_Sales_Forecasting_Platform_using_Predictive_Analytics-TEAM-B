@@ -2,6 +2,7 @@ import io
 import pandas as pd
 import streamlit as st
 
+from frontend.utils.api_client import bulk_import_api, fetch_users
 from frontend.utils.csv_parser import (
     TARGET_SCHEMA_FIELDS,
     auto_match_column,
@@ -10,7 +11,7 @@ from frontend.utils.csv_parser import (
 
 
 def render_csv_uploader():
-    """Renders the Bulk CSV Ingestion interface."""
+    """Renders the Bulk CSV Ingestion interface with database commit support."""
     
     if "demo_active" not in st.session_state:
         st.session_state["demo_active"] = False
@@ -38,7 +39,7 @@ def render_csv_uploader():
 
         st.markdown("<div style='margin-top: 8px;'></div>", unsafe_allow_html=True)
 
-        # Single dropzone
+        # File Dropzone
         uploaded_file = st.file_uploader(
             "Upload Prospects CSV",
             type=["csv"],
@@ -157,17 +158,21 @@ def render_csv_uploader():
                     missing.append("Work Email")
                 st.error(f"Missing mandatory mapping: {', '.join(missing)}.")
 
-            st.checkbox(
+            # Assignment fixed: skip_dupes defined here
+            skip_dupes = st.checkbox(
                 "Skip existing duplicates based on email check (Recommended)",
                 value=True,
             )
 
         with val_col2:
-            st.selectbox(
+            users_list = fetch_users()
+            user_options = {u["name"]: u["user_id"] for u in users_list}
+            owner_name = st.selectbox(
                 "Assign Ingested Leads To",
-                options=["Alex Rep (Current User)", "Sarah Jenkins (BDR)", "Unassigned"],
+                options=list(user_options.keys()) if user_options else ["Alex Rep"],
                 index=0,
             )
+            selected_owner_id = user_options.get(owner_name)
 
         # Action Buttons
         btn_col1, btn_col2, btn_col3 = st.columns([4, 1.5, 2.5])
@@ -180,24 +185,55 @@ def render_csv_uploader():
         with btn_col3:
             ready = has_company and has_email
             if st.button(
-                f"⚡ Import & Queue {row_count} Leads",
+                f"⚡ Import & Commit {row_count} Leads",
                 type="primary",
                 use_container_width=True,
                 disabled=not ready,
             ):
-                staged = []
+                leads_to_post = []
                 for _, r in df.iterrows():
-                    staged.append({
-                        "company_name": r.get([c for c, m in column_mapping.items() if m == "company_name"][0], "Unknown"),
-                        "contact_name": r.get([c for c, m in column_mapping.items() if m == "contact_name"][0], "N/A") if "contact_name" in mapped_targets else "N/A",
-                        "email": r.get([c for c, m in column_mapping.items() if m == "email"][0], ""),
+                    lead_dict = {
+                        "company_name": str(r.get([c for c, m in column_mapping.items() if m == "company_name"][0], "Unknown")).strip(),
+                        "email": str(r.get([c for c, m in column_mapping.items() if m == "email"][0], "")).strip().lower(),
                         "source": "CSV",
                         "lead_status": "New Leads",
-                        "ai_status": "Queued",
-                    })
+                        "owner_user_id": selected_owner_id,
+                    }
+                    if "contact_name" in mapped_targets:
+                        val = str(r.get([c for c, m in column_mapping.items() if m == "contact_name"][0], "")).strip()
+                        lead_dict["contact_name"] = val if val and val != "nan" else None
+                    if "contact_title" in mapped_targets:
+                        val = str(r.get([c for c, m in column_mapping.items() if m == "contact_title"][0], "")).strip()
+                        lead_dict["contact_title"] = val if val and val != "nan" else None
+                    if "industry" in mapped_targets:
+                        val = str(r.get([c for c, m in column_mapping.items() if m == "industry"][0], "")).strip()
+                        lead_dict["industry"] = val if val and val != "nan" else None
+                    if "company_size" in mapped_targets:
+                        val = str(r.get([c for c, m in column_mapping.items() if m == "company_size"][0], "")).strip()
+                        lead_dict["company_size"] = val if val and val != "nan" else None
+                    if "funding_stage" in mapped_targets:
+                        val = str(r.get([c for c, m in column_mapping.items() if m == "funding_stage"][0], "")).strip()
+                        lead_dict["funding_stage"] = val if val and val != "nan" else None
+                    if "location" in mapped_targets:
+                        val = str(r.get([c for c, m in column_mapping.items() if m == "location"][0], "")).strip()
+                        lead_dict["location"] = val if val and val != "nan" else None
+                    if "tech_stack" in mapped_targets:
+                        raw_stack = str(r.get([c for c, m in column_mapping.items() if m == "tech_stack"][0], "")).strip()
+                        if raw_stack and raw_stack != "nan":
+                            lead_dict["tech_stack"] = [t.strip() for t in raw_stack.split(",") if t.strip()]
+                        else:
+                            lead_dict["tech_stack"] = None
 
-                st.session_state["recent_ingested_leads"].extend(staged)
-                st.session_state["session_additions"] += row_count
-                st.session_state["demo_active"] = False
-                st.toast(f"Staged {row_count} leads successfully!", icon="✅")
-                st.rerun()
+                    leads_to_post.append(lead_dict)
+
+                success, result = bulk_import_api(leads_to_post, skip_duplicates=skip_dupes)
+
+                if success:
+                    imported = result.get("imported_count", 0)
+                    skipped = result.get("skipped_duplicates", 0)
+                    st.session_state["session_additions"] += imported
+                    st.session_state["demo_active"] = False
+                    st.toast(f"Committed {imported} leads to PostgreSQL! ({skipped} duplicates skipped)", icon="✅")
+                    st.rerun()
+                else:
+                    st.error(f"Import failed: {result}")

@@ -1,19 +1,22 @@
 import streamlit as st
+from frontend.utils.api_client import check_backend_health, fetch_pipeline_stats
 
 
-def render_header(total_leads: int = 1284, session_additions: int = 0, pending_scores: int = 18):
-    """Renders the top navigation bar with theme toggle and metric cards."""
+def render_header(session_additions: int = 0):
     current_mode = st.session_state.get("theme_mode", "dark")
+    is_online = check_backend_health()
 
     # Top Navigation Row
     nav_col, action_col = st.columns([8.2, 1.8], vertical_alignment="center")
 
     with nav_col:
+        status_dot = "🟢" if is_online else "🟡 Offline"
         st.markdown(
-            """
+            f"""
             <div class="sg-nav-container">
                 <div class="sg-nav-brand">
                     <span style="font-size: 16px;">⚡</span> SalesGenie AI
+                    <span style="font-size: 11px; font-weight: 500; opacity: 0.8; margin-left: 6px;">{status_dot}</span>
                 </div>
                 <div class="sg-nav-links">
                     <span class="sg-nav-link sg-nav-active">📊 Leads & Ingestion</span>
@@ -30,7 +33,6 @@ def render_header(total_leads: int = 1284, session_additions: int = 0, pending_s
         )
 
     with action_col:
-        # Theme toggle button
         toggle_label = "☀️ Light Mode" if current_mode == "dark" else "🌙 Dark Mode"
         if st.button(toggle_label, use_container_width=True, type="secondary"):
             st.session_state["theme_mode"] = "light" if current_mode == "dark" else "dark"
@@ -51,6 +53,11 @@ def render_header(total_leads: int = 1284, session_additions: int = 0, pending_s
         unsafe_allow_html=True,
     )
 
+    # Pull live stats from backend
+    stats = fetch_pipeline_stats()
+    total_leads = stats.get("total_leads", 0)
+    pending_scores = stats.get("pending_ai_scoring", 0)
+
     # 4 Metric Cards
     c1, c2, c3, c4 = st.columns(4)
 
@@ -58,7 +65,7 @@ def render_header(total_leads: int = 1284, session_additions: int = 0, pending_s
         with st.container(border=True):
             st.caption("TOTAL PIPELINE LEADS")
             st.markdown(f"<h3 style='margin:0; font-size: 24px; font-weight: 700;'>{total_leads:,}</h3>", unsafe_allow_html=True)
-            st.markdown("<span class='sg-metric-accent'>● Active in PostgreSQL</span>", unsafe_allow_html=True)
+            st.markdown("<span class='sg-metric-accent'>● Stored in PostgreSQL</span>", unsafe_allow_html=True)
 
     with c2:
         with st.container(border=True):

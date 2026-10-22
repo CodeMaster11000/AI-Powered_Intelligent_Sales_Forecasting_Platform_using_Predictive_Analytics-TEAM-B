@@ -1,7 +1,9 @@
 import re
 import streamlit as st
 
-# Constraints strictly matching backend/database/models/leads.py
+from frontend.utils.api_client import create_lead_api, fetch_users
+
+# Schema constraints matching backend/database/models/leads.py
 LEAD_STATUSES = ["New Leads", "Qualified", "Proposal", "Negotiation", "Closed Won"]
 SOURCES = ["Sales Entry", "LinkedIn", "Website Form", "CRM", "CSV"]
 COMPANY_SIZES = ["1 - 10", "11 - 50", "51 - 200", "201 - 500", "501 - 1000", "1000+"]
@@ -13,21 +15,24 @@ COMMON_TECH_STACK = [
 
 
 def is_valid_email(email: str) -> bool:
-    """Basic email format validator."""
+    """Basic email validator."""
     pattern = r"^[\w\.-]+@[\w\.-]+\.\w+$"
     return re.match(pattern, email) is not None
 
 
 def render_manual_form():
-    """Renders Wireframe 2: Grouped manual lead entry card grid."""
+    """Renders Wireframe 2: Grouped manual lead entry connected to PostgreSQL."""
     
-    # Form key versioning to enable seamless resetting
     if "manual_form_version" not in st.session_state:
         st.session_state["manual_form_version"] = 0
 
     v = st.session_state["manual_form_version"]
 
-    st.caption("Enter prospect details manually. Fields marked (*) are required for pipeline qualification.")
+    st.caption("Enter prospect details manually. Fields marked (*) are committed directly to PostgreSQL.")
+
+    # Fetch live users for owner assignment
+    users_list = fetch_users()
+    user_options = {u["name"]: u["user_id"] for u in users_list} if users_list else {"Alex Rep": 1}
 
     # 2x2 Grid of Semantic Cards
     row1_left, row1_right = st.columns(2)
@@ -121,7 +126,7 @@ def render_manual_form():
                 "Known Tech Stack",
                 options=COMMON_TECH_STACK,
                 default=["AWS", "PostgreSQL"],
-                help="Select technologies identified on their job posts or website.",
+                help="Select technologies identified on company assets.",
                 key=f"tech_stack_{v}",
             )
             
@@ -131,7 +136,10 @@ def render_manual_form():
             with c_sub6:
                 lead_status = st.selectbox("Initial Pipeline Stage", options=LEAD_STATUSES, index=0, key=f"stage_{v}")
 
-    # --- ACTION TOOLBAR ---
+            owner_name = st.selectbox("Lead Owner", options=list(user_options.keys()), index=0, key=f"owner_{v}")
+            owner_id = user_options.get(owner_name)
+
+    # --- ACTION BUTTONS ---
     st.markdown("<div style='margin-top: 8px;'></div>", unsafe_allow_html=True)
     b_col1, b_col2, b_col3, b_col4 = st.columns([4, 1.5, 2, 2.5])
 
@@ -140,8 +148,8 @@ def render_manual_form():
             st.session_state["manual_form_version"] += 1
             st.rerun()
 
-    def validate_and_create_lead():
-        """Validates input fields against requirements and duplicates."""
+    def build_lead_payload():
+        """Validates input fields and returns API-ready dictionary."""
         cleaned_company = company_name.strip()
         cleaned_email = email.strip().lower()
 
@@ -152,49 +160,49 @@ def render_manual_form():
             st.error("Work Email is required.")
             return None
         if not is_valid_email(cleaned_email):
-            st.error("Please enter a valid email address (e.g., name@company.com).")
-            return None
-
-        # Check against leads already staged in this session
-        existing_emails = [lead["email"].lower() for lead in st.session_state.get("recent_ingested_leads", [])]
-        if cleaned_email in existing_emails:
-            st.warning(f"A lead with email '{cleaned_email}' has already been staged in this session.")
+            st.error("Please enter a valid email address.")
             return None
 
         return {
             "company_name": cleaned_company,
-            "contact_name": contact_name.strip() if contact_name.strip() else "N/A",
-            "contact_title": contact_title.strip() if contact_title.strip() else "N/A",
+            "contact_name": contact_name.strip() if contact_name.strip() else None,
+            "contact_title": contact_title.strip() if contact_title.strip() else None,
             "email": cleaned_email,
-            "phone": phone.strip() if phone.strip() else "N/A",
+            "phone": phone.strip() if phone.strip() else None,
             "industry": industry,
             "company_size": company_size,
             "annual_revenue": annual_revenue,
             "funding_stage": funding_stage,
-            "funding_raised": funding_raised.strip() if funding_raised.strip() else "N/A",
-            "location": location.strip() if location.strip() else "N/A",
-            "tech_stack": ", ".join(tech_stack) if tech_stack else "None",
+            "funding_raised": funding_raised.strip() if funding_raised.strip() else None,
+            "location": location.strip() if location.strip() else None,
+            "tech_stack": tech_stack if tech_stack else None,
             "source": source,
             "lead_status": lead_status,
-            "ai_status": "Queued",
+            "owner_user_id": owner_id,
         }
 
     with b_col3:
         if st.button("💾 Save & Add Another", use_container_width=True, type="secondary"):
-            new_lead = validate_and_create_lead()
-            if new_lead:
-                st.session_state["recent_ingested_leads"].insert(0, new_lead)
-                st.session_state["session_additions"] += 1
-                st.session_state["manual_form_version"] += 1
-                st.toast(f"Saved {new_lead['company_name']}! Ready for next lead.", icon="✅")
-                st.rerun()
+            payload = build_lead_payload()
+            if payload:
+                success, msg = create_lead_api(payload)
+                if success:
+                    st.session_state["session_additions"] += 1
+                    st.session_state["manual_form_version"] += 1
+                    st.toast(f"Saved {payload['company_name']} to PostgreSQL!", icon="✅")
+                    st.rerun()
+                else:
+                    st.error(f"Error: {msg}")
 
     with b_col4:
         if st.button("⚡ Save & Queue for Scoring", use_container_width=True, type="primary"):
-            new_lead = validate_and_create_lead()
-            if new_lead:
-                st.session_state["recent_ingested_leads"].insert(0, new_lead)
-                st.session_state["session_additions"] += 1
-                st.session_state["manual_form_version"] += 1
-                st.toast(f"Saved & queued {new_lead['company_name']} for AI scoring!", icon="⚡")
-                st.rerun()
+            payload = build_lead_payload()
+            if payload:
+                success, msg = create_lead_api(payload)
+                if success:
+                    st.session_state["session_additions"] += 1
+                    st.session_state["manual_form_version"] += 1
+                    st.toast(f"Committed & queued {payload['company_name']}!", icon="⚡")
+                    st.rerun()
+                else:
+                    st.error(f"Error: {msg}")

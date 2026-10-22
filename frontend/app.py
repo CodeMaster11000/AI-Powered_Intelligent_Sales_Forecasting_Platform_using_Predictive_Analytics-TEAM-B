@@ -26,11 +26,8 @@ from frontend.styles.themes import apply_theme
 apply_theme()
 
 # 4. Render Header (with theme switcher)
-render_header(
-    total_leads=1284,
-    session_additions=st.session_state["session_additions"],
-    pending_scores=18,
-)
+# Fixed:
+render_header(session_additions=st.session_state["session_additions"])
 
 # 5. Work Area Tabs
 tab_bulk, tab_manual = st.tabs(["📁 Bulk CSV Import", "✏️ Manual Single Entry"])
