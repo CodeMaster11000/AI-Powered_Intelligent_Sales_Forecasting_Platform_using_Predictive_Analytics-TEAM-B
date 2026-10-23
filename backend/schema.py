@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Literal
+from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
@@ -64,3 +64,55 @@ class UserResponse(BaseModel):
     name: str
     email: str
     role: str
+
+
+# Module 2: AI Lead Intelligence Schemas (REQ-M2-01, M2-02, M2-03)
+# =====================================================================
+
+class ProspectAnalysisRequest(BaseModel):
+    """Ad-hoc analysis payload for any prospect without requiring prior database insertion."""
+    company_name: str
+    industry: Optional[str] = "Technology"
+    contact_name: Optional[str] = "Decision Maker"
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = None
+    company_size: Optional[str] = None
+    annual_revenue: Optional[str] = None
+    funding_stage: Optional[str] = None
+    capital_raised: Optional[str] = None
+    location: Optional[str] = None
+    tech_stack: Optional[str] = None
+
+
+class CompanyInsightResponse(BaseModel):
+    insight_id: Optional[int] = None
+    lead_id: int
+    qualification_score: Optional[int] = None
+    conversion_probability: Optional[float] = None
+    business_needs: Optional[str] = None
+    opportunities: Optional[Any] = None
+    industry_analysis: Optional[str] = None
+    growth_indicators: Optional[Any] = None
+    tech_alignment: Optional[Any] = None
+    decision_maker_summary: Optional[Any] = None
+    generated_at: Optional[str] = None
+
+
+class LeadAnalysisResponse(BaseModel):
+    lead_id: int
+    company_name: str
+    qualification_score: int
+    conversion_probability: float
+    lead_status: str
+    high_growth_potential: Optional[bool] = None
+    business_needs: Optional[str] = None
+    strategic_recommendation: Optional[str] = None
+    industry_analysis: Optional[str] = None
+    transformation_opportunities: Optional[List[Dict[str, Any]]] = None
+    tech_alignment_metrics: Optional[List[Dict[str, Any]]] = None
+    decision_makers: Optional[List[Dict[str, Any]]] = None
+    execution_latency_seconds: Optional[float] = None
+
+
+class BatchAnalysisRequest(BaseModel):
+    lead_ids: List[int]

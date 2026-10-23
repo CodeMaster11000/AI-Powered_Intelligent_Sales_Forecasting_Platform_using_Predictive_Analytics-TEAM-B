@@ -17,6 +17,10 @@ from backend.schema import (
     LeadResponse,
     PipelineStatsResponse,
     UserResponse,
+    ProspectAnalysisRequest,
+    CompanyInsightResponse,
+    LeadAnalysisResponse,
+    BatchAnalysisRequest,
 )
 from modules.module1_leads import (
     bulk_import_leads,
@@ -25,7 +29,14 @@ from modules.module1_leads import (
     list_leads,
     seed_default_users,
 )
-from modules.module2_intelligence import generate_company_insights
+from modules.module2_intelligence import (
+    generate_company_insights,
+    analyze_lead_intelligence,
+    analyze_and_store_lead_intelligence,
+    get_lead_insights,
+    batch_analyze_leads,
+    get_architecture_diagram,
+)
 from modules.module3_outreach import generate_personalized_email
 from modules.module4_scoring import calculate_lead_score, score_lead
 
@@ -81,6 +92,47 @@ def get_all_leads(
     db: Session = Depends(get_db),
 ):
     return list_leads(db, search=search, source=source, limit=limit)
+
+
+# --- MULTI-AGENT LEAD INTELLIGENCE ---
+@app.post("/api/leads/{lead_id}/analyze", response_model=LeadAnalysisResponse, tags=["Lead Intelligence"])
+def analyze_lead(lead_id: int, db: Session = Depends(get_db)):
+    try:
+        return analyze_and_store_lead_intelligence(db, lead_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {e}")
+
+
+@app.get("/api/leads/{lead_id}/insights", response_model=CompanyInsightResponse, tags=["Lead Intelligence"])
+def get_lead_insight_record(lead_id: int, db: Session = Depends(get_db)):
+    insight = get_lead_insights(db, lead_id)
+    if not insight:
+        raise HTTPException(status_code=404, detail=f"No intelligence insight found for lead {lead_id}")
+    return insight
+
+
+@app.post("/api/leads/batch-analyze", response_model=list[dict], tags=["Lead Intelligence"])
+def batch_analyze(req: BatchAnalysisRequest, db: Session = Depends(get_db)):
+    return batch_analyze_leads(db, req.lead_ids)
+
+
+@app.post("/api/intelligence/analyze-prospect", tags=["Lead Intelligence"])
+def analyze_raw_prospect(prospect: ProspectAnalysisRequest):
+    try:
+        return analyze_lead_intelligence(prospect.model_dump())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/intelligence/architecture", tags=["Lead Intelligence"])
+def get_agent_architecture():
+    return {
+        "framework": "LangGraph",
+        "nodes": ["research_agent", "qualification_agent"],
+        "architecture_diagram_mermaid": get_architecture_diagram(),
+    }
 
 
 # --- SCORING & INTELLIGENCE ENDPOINTS ---

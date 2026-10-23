@@ -162,3 +162,40 @@ def send_outreach_email_api(lead_id: int, subject: str, body: str) -> tuple[bool
         return True, "Outreach dispatched (Simulated delivery)."
     except requests.RequestException:
         return True, "Outreach dispatched (Simulated delivery)."
+
+
+def analyze_lead_api(lead_id: int) -> tuple[bool, dict | str]:
+    """Runs the LangGraph intelligence pipeline for a stored lead."""
+    try:
+        res = requests.post(f"{API_BASE_URL}/api/leads/{lead_id}/analyze", timeout=30.0)
+        if res.status_code == 200:
+            return True, res.json()
+        return False, res.json().get("detail", res.text)
+    except requests.RequestException as e:
+        return False, f"Analysis service error: {e}"
+
+
+def fetch_lead_insights_api(lead_id: int) -> dict | None:
+    """Retrieves persisted intelligence for a lead."""
+    try:
+        res = requests.get(f"{API_BASE_URL}/api/leads/{lead_id}/insights", timeout=4.0)
+        if res.status_code == 200:
+            return res.json()
+    except requests.RequestException:
+        pass
+    return None
+
+
+def analyze_prospect_ad_hoc_api(payload: dict) -> tuple[bool, dict | str]:
+    """Runs intelligence analysis without creating a database lead."""
+    try:
+        res = requests.post(
+            f"{API_BASE_URL}/api/intelligence/analyze-prospect",
+            json=payload,
+            timeout=30.0,
+        )
+        if res.status_code == 200:
+            return True, res.json()
+        return False, res.json().get("detail", res.text)
+    except requests.RequestException as e:
+        return False, f"Analysis service error: {e}"
