@@ -1,0 +1,1735 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+components/
+  __init__.py
+  csv_uploader.py
+  header.py
+  manual_form.py
+  outreach_studio.py
+  scoring_hub.py
+  staging_feed.py
+styles/
+  __init__.py
+  themes.py
+utils/
+  __init__.py
+  api_client.py
+  csv_parser.py
+app.py
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="components/__init__.py">
+
+</file>
+
+<file path="components/csv_uploader.py">
+import io
+import pandas as pd
+import streamlit as st
+
+from frontend.utils.api_client import bulk_import_api, fetch_users
+from frontend.utils.csv_parser import (
+    TARGET_SCHEMA_FIELDS,
+    auto_match_column,
+    generate_sample_csv,
+)
+
+
+def render_csv_uploader():
+    """Renders the Bulk CSV Ingestion interface with database commit support."""
+    
+    if "demo_active" not in st.session_state:
+        st.session_state["demo_active"] = False
+
+    with st.container(border=True):
+        # Action toolbar
+        t_col1, t_col2, t_col3 = st.columns([2.5, 1.2, 1.3])
+
+        with t_col1:
+            st.markdown("<h4 style='margin:0; font-size: 16px; font-weight: 600;'>Bulk Prospect Import</h4>", unsafe_allow_html=True)
+            st.caption("Upload a `.csv` file with prospect company and contact details.")
+
+        with t_col2:
+            st.download_button(
+                label="⬇️ Download Template",
+                data=generate_sample_csv(),
+                file_name="salesgenie_prospect_template.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
+
+        with t_col3:
+            if st.button("⚡ Load Demo Batch (3 Leads)", use_container_width=True):
+                st.session_state["demo_active"] = True
+
+        st.markdown("<div style='margin-top: 8px;'></div>", unsafe_allow_html=True)
+
+        # File Dropzone
+        uploaded_file = st.file_uploader(
+            "Upload Prospects CSV",
+            type=["csv"],
+            help="Upload a standard CSV file with company and contact details.",
+            label_visibility="collapsed",
+        )
+
+        df = None
+        file_display_name = ""
+
+        if uploaded_file is not None:
+            try:
+                df = pd.read_csv(uploaded_file)
+                file_display_name = uploaded_file.name
+            except Exception as e:
+                st.error(f"Failed to read CSV: {e}")
+                return
+        elif st.session_state["demo_active"]:
+            df = pd.read_csv(io.StringIO(generate_sample_csv()))
+            file_display_name = "Q4_outbound_prospects_sample.csv"
+
+        if df is None:
+            return
+
+        # Active Data Mapping State
+        row_count = len(df)
+        st.markdown(
+            f"""
+            <div class="sg-file-banner">
+                <div style="font-size: 13px; font-weight: 600;">
+                    📄 File Loaded: <code>{file_display_name}</code> ({row_count} prospect rows detected)
+                </div>
+                <span class="sg-pill sg-pill-teal">Ready for Mapping</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        st.markdown("<h5 style='font-size: 14px; font-weight: 600; margin: 12px 0 2px 0;'>Smart Column Mapping</h5>", unsafe_allow_html=True)
+        st.caption("Confirm detected CSV columns against database fields. Required fields marked (*).")
+
+        target_options = ["-- Ignore Field --"] + [
+            f"{v['label']} {'*' if v['required'] else ''} ({k})"
+            for k, v in TARGET_SCHEMA_FIELDS.items()
+        ]
+        key_to_option = {
+            k: f"{v['label']} {'*' if v['required'] else ''} ({k})"
+            for k, v in TARGET_SCHEMA_FIELDS.items()
+        }
+
+        # Header Row
+        h_col1, h_col2, h_col3, h_col4 = st.columns([2.2, 3, 3, 1.2])
+        h_col1.caption("CSV COLUMN HEADER")
+        h_col2.caption("TARGET LEAD FIELD")
+        h_col3.caption("SAMPLE DATA (ROW 1)")
+        h_col4.caption("STATUS")
+
+        column_mapping = {}
+
+        for idx, col_name in enumerate(df.columns):
+            c1, c2, c3, c4 = st.columns([2.2, 3, 3, 1.2])
+
+            sample_val = str(df[col_name].iloc[0]) if not df.empty else "N/A"
+            sample_display = (sample_val[:28] + "...") if len(sample_val) > 28 else sample_val
+
+            guessed_key = auto_match_column(col_name)
+            default_index = 0
+            if guessed_key in key_to_option:
+                target_str = key_to_option[guessed_key]
+                default_index = target_options.index(target_str)
+
+            c1.markdown(f"<div style='padding-top: 8px; font-size: 13px; font-weight: 500;'>{col_name}</div>", unsafe_allow_html=True)
+
+            selected_option = c2.selectbox(
+                f"Map {col_name}",
+                options=target_options,
+                index=default_index,
+                key=f"col_map_{idx}",
+                label_visibility="collapsed",
+            )
+
+            c3.markdown(
+                f"<div style='padding-top: 8px; opacity: 0.8; font-family: monospace; font-size: 12px;'>{sample_display}</div>",
+                unsafe_allow_html=True,
+            )
+
+            if selected_option != "-- Ignore Field --":
+                target_field_key = selected_option.split("(")[-1].replace(")", "").strip()
+                column_mapping[col_name] = target_field_key
+                if guessed_key == target_field_key:
+                    c4.markdown("<div style='padding-top: 6px;'><span class='sg-pill sg-pill-teal'>Auto ✓</span></div>", unsafe_allow_html=True)
+                else:
+                    c4.markdown("<div style='padding-top: 6px;'><span class='sg-pill sg-pill-slate'>Mapped</span></div>", unsafe_allow_html=True)
+            else:
+                c4.markdown("<div style='padding-top: 6px;'><span class='sg-pill sg-pill-slate'>Ignored</span></div>", unsafe_allow_html=True)
+
+        st.divider()
+
+        # Pre-import verification checks
+        st.markdown("<h5 style='font-size: 14px; font-weight: 600; margin-bottom: 6px;'>Pre-Import Validation</h5>", unsafe_allow_html=True)
+
+        mapped_targets = list(column_mapping.values())
+        has_company = "company_name" in mapped_targets
+        has_email = "email" in mapped_targets
+
+        val_col1, val_col2 = st.columns([2.5, 1.5])
+
+        with val_col1:
+            if has_company and has_email:
+                st.success(f"✓ Mandatory fields (`company_name` & `email`) verified across all {row_count} rows.")
+            else:
+                missing = []
+                if not has_company:
+                    missing.append("Company Name")
+                if not has_email:
+                    missing.append("Work Email")
+                st.error(f"Missing mandatory mapping: {', '.join(missing)}.")
+
+            # Assignment fixed: skip_dupes defined here
+            skip_dupes = st.checkbox(
+                "Skip existing duplicates based on email check (Recommended)",
+                value=True,
+            )
+
+        with val_col2:
+            users_list = fetch_users()
+            user_options = {u["name"]: u["user_id"] for u in users_list}
+            owner_name = st.selectbox(
+                "Assign Ingested Leads To",
+                options=list(user_options.keys()) if user_options else ["Alex Rep"],
+                index=0,
+            )
+            selected_owner_id = user_options.get(owner_name)
+
+        # Action Buttons
+        btn_col1, btn_col2, btn_col3 = st.columns([4, 1.5, 2.5])
+
+        with btn_col2:
+            if st.button("Reset File", use_container_width=True):
+                st.session_state["demo_active"] = False
+                st.rerun()
+
+        with btn_col3:
+            ready = has_company and has_email
+            if st.button(
+                f"⚡ Import & Commit {row_count} Leads",
+                type="primary",
+                use_container_width=True,
+                disabled=not ready,
+            ):
+                leads_to_post = []
+                for _, r in df.iterrows():
+                    lead_dict = {
+                        "company_name": str(r.get([c for c, m in column_mapping.items() if m == "company_name"][0], "Unknown")).strip(),
+                        "email": str(r.get([c for c, m in column_mapping.items() if m == "email"][0], "")).strip().lower(),
+                        "source": "CSV",
+                        "lead_status": "New Leads",
+                        "owner_user_id": selected_owner_id,
+                    }
+                    if "contact_name" in mapped_targets:
+                        val = str(r.get([c for c, m in column_mapping.items() if m == "contact_name"][0], "")).strip()
+                        lead_dict["contact_name"] = val if val and val != "nan" else None
+                    if "contact_title" in mapped_targets:
+                        val = str(r.get([c for c, m in column_mapping.items() if m == "contact_title"][0], "")).strip()
+                        lead_dict["contact_title"] = val if val and val != "nan" else None
+                    if "industry" in mapped_targets:
+                        val = str(r.get([c for c, m in column_mapping.items() if m == "industry"][0], "")).strip()
+                        lead_dict["industry"] = val if val and val != "nan" else None
+                    if "company_size" in mapped_targets:
+                        val = str(r.get([c for c, m in column_mapping.items() if m == "company_size"][0], "")).strip()
+                        lead_dict["company_size"] = val if val and val != "nan" else None
+                    if "funding_stage" in mapped_targets:
+                        val = str(r.get([c for c, m in column_mapping.items() if m == "funding_stage"][0], "")).strip()
+                        lead_dict["funding_stage"] = val if val and val != "nan" else None
+                    if "location" in mapped_targets:
+                        val = str(r.get([c for c, m in column_mapping.items() if m == "location"][0], "")).strip()
+                        lead_dict["location"] = val if val and val != "nan" else None
+                    if "tech_stack" in mapped_targets:
+                        raw_stack = str(r.get([c for c, m in column_mapping.items() if m == "tech_stack"][0], "")).strip()
+                        if raw_stack and raw_stack != "nan":
+                            lead_dict["tech_stack"] = [t.strip() for t in raw_stack.split(",") if t.strip()]
+                        else:
+                            lead_dict["tech_stack"] = None
+
+                    leads_to_post.append(lead_dict)
+
+                success, result = bulk_import_api(leads_to_post, skip_duplicates=skip_dupes)
+
+                if success:
+                    imported = result.get("imported_count", 0)
+                    skipped = result.get("skipped_duplicates", 0)
+                    st.session_state["session_additions"] += imported
+                    st.session_state["demo_active"] = False
+                    st.toast(f"Committed {imported} leads to PostgreSQL! ({skipped} duplicates skipped)", icon="✅")
+                    st.rerun()
+                else:
+                    st.error(f"Import failed: {result}")
+</file>
+
+<file path="components/header.py">
+import streamlit as st
+from frontend.utils.api_client import check_backend_health, fetch_pipeline_stats
+
+
+def render_header(session_additions: int = 0):
+    current_mode = st.session_state.get("theme_mode", "dark")
+    is_online = check_backend_health()
+
+    # Top Navigation Row
+    nav_col, action_col = st.columns([8.2, 1.8], vertical_alignment="center")
+
+    with nav_col:
+        status_dot = "🟢" if is_online else "🟡 Offline"
+        st.markdown(
+            f"""
+            <div class="sg-nav-container">
+                <div class="sg-nav-brand">
+                    <span style="font-size: 16px;">⚡</span> SalesGenie AI
+                    <span style="font-size: 11px; font-weight: 500; opacity: 0.8; margin-left: 6px;">{status_dot}</span>
+                </div>
+                <div class="sg-nav-links">
+                    <span class="sg-nav-link sg-nav-active">📊 Leads & Ingestion</span>
+                    <span class="sg-nav-link">⚡ Predictive Scoring</span>
+                    <span class="sg-nav-link">✉️ Cold Outreach</span>
+                    <span class="sg-nav-link">📈 Pipeline Insights</span>
+                </div>
+                <div style="font-size: 13px;">
+                    👤 <span style="font-weight: 600;">Alex Rep</span>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    with action_col:
+        toggle_label = "☀️ Light Mode" if current_mode == "dark" else "🌙 Dark Mode"
+        if st.button(toggle_label, use_container_width=True, type="secondary"):
+            st.session_state["theme_mode"] = "light" if current_mode == "dark" else "dark"
+            st.rerun()
+
+    st.markdown("<div style='margin-top: 14px;'></div>", unsafe_allow_html=True)
+
+    # Title & Subtitle
+    st.markdown(
+        """
+        <div style="margin-bottom: 18px;">
+            <h2 class="sg-title">Lead Ingestion & Pipeline Staging</h2>
+            <p class="sg-subtitle">
+                Ingest prospect records across data vectors. Validated records are queued for automated predictive scoring and qualification.
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Pull live stats from backend
+    stats = fetch_pipeline_stats()
+    total_leads = stats.get("total_leads", 0)
+    pending_scores = stats.get("pending_ai_scoring", 0)
+
+    # 4 Metric Cards
+    c1, c2, c3, c4 = st.columns(4)
+
+    with c1:
+        with st.container(border=True):
+            st.caption("TOTAL PIPELINE LEADS")
+            st.markdown(f"<h3 style='margin:0; font-size: 24px; font-weight: 700;'>{total_leads:,}</h3>", unsafe_allow_html=True)
+            st.markdown("<span class='sg-metric-accent'>● Stored in PostgreSQL</span>", unsafe_allow_html=True)
+
+    with c2:
+        with st.container(border=True):
+            st.caption("SESSION ADDITIONS")
+            st.markdown(f"<h3 style='margin:0; font-size: 24px; font-weight: 700;'>+{session_additions}</h3>", unsafe_allow_html=True)
+            st.markdown("<span class='sg-metric-accent'>Current intake batch</span>", unsafe_allow_html=True)
+
+    with c3:
+        with st.container(border=True):
+            st.caption("INGESTION HEALTH")
+            st.markdown("<h3 style='margin:0; font-size: 24px; font-weight: 700;'>98.4%</h3>", unsafe_allow_html=True)
+            st.markdown("<span class='sg-metric-accent'>SRS Target: ≥ 95%</span>", unsafe_allow_html=True)
+
+    with c4:
+        with st.container(border=True):
+            st.caption("PENDING AI SCORING")
+            st.markdown(f"<h3 style='margin:0; font-size: 24px; font-weight: 700;'>{pending_scores}</h3>", unsafe_allow_html=True)
+            st.markdown("<span class='sg-metric-accent'>Step 2 Queue</span>", unsafe_allow_html=True)
+
+    st.markdown("<div style='margin-bottom: 12px;'></div>", unsafe_allow_html=True)
+</file>
+
+<file path="components/manual_form.py">
+import re
+import streamlit as st
+
+from frontend.utils.api_client import create_lead_api, fetch_users
+
+# Schema constraints matching backend/database/models/leads.py
+LEAD_STATUSES = ["New Leads", "Qualified", "Proposal", "Negotiation", "Closed Won"]
+SOURCES = ["Sales Entry", "LinkedIn", "Website Form", "CRM", "CSV"]
+COMPANY_SIZES = ["1 - 10", "11 - 50", "51 - 200", "201 - 500", "501 - 1000", "1000+"]
+FUNDING_STAGES = ["Bootstrapped", "Pre-Seed", "Seed", "Series A", "Series B", "Series C+", "Growth / PE", "Public"]
+COMMON_TECH_STACK = [
+    "AWS", "Google Cloud", "Azure", "PostgreSQL", "Snowflake", "Databricks",
+    "Python", "React", "Node.js", "Docker", "Kubernetes", "Salesforce", "HubSpot"
+]
+
+
+def is_valid_email(email: str) -> bool:
+    """Basic email validator."""
+    pattern = r"^[\w\.-]+@[\w\.-]+\.\w+$"
+    return re.match(pattern, email) is not None
+
+
+def render_manual_form():
+    """Renders Wireframe 2: Grouped manual lead entry connected to PostgreSQL."""
+    
+    if "manual_form_version" not in st.session_state:
+        st.session_state["manual_form_version"] = 0
+
+    v = st.session_state["manual_form_version"]
+
+    st.caption("Enter prospect details manually. Fields marked (*) are committed directly to PostgreSQL.")
+
+    # Fetch live users for owner assignment
+    users_list = fetch_users()
+    user_options = {u["name"]: u["user_id"] for u in users_list} if users_list else {"Alex Rep": 1}
+
+    # 2x2 Grid of Semantic Cards
+    row1_left, row1_right = st.columns(2)
+    row2_left, row2_right = st.columns(2)
+
+    # --- CARD 1: CONTACT DETAILS ---
+    with row1_left:
+        with st.container(border=True):
+            st.markdown(
+                """
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                    <span style="font-size: 14px; font-weight: 600;">👤 Primary Contact</span>
+                    <span class="sg-pill sg-pill-slate">Decision Maker</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            contact_name = st.text_input("Contact Full Name", placeholder="e.g. Sarah Jenkins", key=f"contact_name_{v}")
+            contact_title = st.text_input(
+                "Job Title",
+                placeholder="e.g. VP of Engineering",
+                help="Used by AI scoring to assess decision-maker level.",
+                key=f"contact_title_{v}",
+            )
+            email = st.text_input("Work Email *", placeholder="e.g. sarah@acmecloud.io", key=f"email_{v}")
+            phone = st.text_input("Direct Phone Number", placeholder="e.g. +1 (415) 555-0192", key=f"phone_{v}")
+
+    # --- CARD 2: COMPANY FIRMOGRAPHICS ---
+    with row1_right:
+        with st.container(border=True):
+            st.markdown(
+                """
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                    <span style="font-size: 14px; font-weight: 600;">🏢 Company Firmographics</span>
+                    <span class="sg-pill sg-pill-slate">Account Profile</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            company_name = st.text_input("Company Name *", placeholder="e.g. Acme Cloud Corp", key=f"company_name_{v}")
+            
+            c_sub1, c_sub2 = st.columns(2)
+            with c_sub1:
+                industry = st.selectbox(
+                    "Industry",
+                    options=["Cloud Infrastructure", "Enterprise SaaS", "Fintech", "Healthtech", "E-commerce", "AI / ML", "Cybersecurity", "Other"],
+                    key=f"industry_{v}",
+                )
+            with c_sub2:
+                company_size = st.selectbox("Company Size (Headcount)", options=COMPANY_SIZES, index=2, key=f"size_{v}")
+
+            c_sub3, c_sub4 = st.columns(2)
+            with c_sub3:
+                location = st.text_input("Headquarters (City, Country)", placeholder="e.g. Austin, TX, USA", key=f"location_{v}")
+            with c_sub4:
+                annual_revenue = st.selectbox(
+                    "Estimated Revenue",
+                    options=["< $1M", "$1M - $5M", "$5M - $10M", "$10M - $25M", "$25M - $50M", "$50M+"],
+                    index=2,
+                    key=f"revenue_{v}",
+                )
+
+    # --- CARD 3: GROWTH & INVESTMENT SIGNALS ---
+    with row2_left:
+        with st.container(border=True):
+            st.markdown(
+                """
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                    <span style="font-size: 14px; font-weight: 600;">🚀 Growth & Financial Signals</span>
+                    <span class="sg-pill sg-pill-teal">Scoring Input</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            funding_stage = st.selectbox("Funding Stage", options=FUNDING_STAGES, index=3, key=f"funding_stage_{v}")
+            funding_raised = st.text_input("Total Capital Raised", placeholder="e.g. $14.5M", key=f"funding_raised_{v}")
+
+    # --- CARD 4: TECH STACK & ATTRIBUTION ---
+    with row2_right:
+        with st.container(border=True):
+            st.markdown(
+                """
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                    <span style="font-size: 14px; font-weight: 600;">⚙️ Tech Stack & Attribution</span>
+                    <span class="sg-pill sg-pill-slate">System Keys</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            tech_stack = st.multiselect(
+                "Known Tech Stack",
+                options=COMMON_TECH_STACK,
+                default=["AWS", "PostgreSQL"],
+                help="Select technologies identified on company assets.",
+                key=f"tech_stack_{v}",
+            )
+            
+            c_sub5, c_sub6 = st.columns(2)
+            with c_sub5:
+                source = st.selectbox("Lead Source *", options=SOURCES, index=0, key=f"source_{v}")
+            with c_sub6:
+                lead_status = st.selectbox("Initial Pipeline Stage", options=LEAD_STATUSES, index=0, key=f"stage_{v}")
+
+            owner_name = st.selectbox("Lead Owner", options=list(user_options.keys()), index=0, key=f"owner_{v}")
+            owner_id = user_options.get(owner_name)
+
+    # --- ACTION BUTTONS ---
+    st.markdown("<div style='margin-top: 8px;'></div>", unsafe_allow_html=True)
+    b_col1, b_col2, b_col3, b_col4 = st.columns([4, 1.5, 2, 2.5])
+
+    with b_col2:
+        if st.button("Reset Form", use_container_width=True, type="secondary"):
+            st.session_state["manual_form_version"] += 1
+            st.rerun()
+
+    def build_lead_payload():
+        """Validates input fields and returns API-ready dictionary."""
+        cleaned_company = company_name.strip()
+        cleaned_email = email.strip().lower()
+
+        if not cleaned_company:
+            st.error("Company Name is required.")
+            return None
+        if not cleaned_email:
+            st.error("Work Email is required.")
+            return None
+        if not is_valid_email(cleaned_email):
+            st.error("Please enter a valid email address.")
+            return None
+
+        return {
+            "company_name": cleaned_company,
+            "contact_name": contact_name.strip() if contact_name.strip() else None,
+            "contact_title": contact_title.strip() if contact_title.strip() else None,
+            "email": cleaned_email,
+            "phone": phone.strip() if phone.strip() else None,
+            "industry": industry,
+            "company_size": company_size,
+            "annual_revenue": annual_revenue,
+            "funding_stage": funding_stage,
+            "funding_raised": funding_raised.strip() if funding_raised.strip() else None,
+            "location": location.strip() if location.strip() else None,
+            "tech_stack": tech_stack if tech_stack else None,
+            "source": source,
+            "lead_status": lead_status,
+            "owner_user_id": owner_id,
+        }
+
+    with b_col3:
+        if st.button("💾 Save & Add Another", use_container_width=True, type="secondary"):
+            payload = build_lead_payload()
+            if payload:
+                success, msg = create_lead_api(payload)
+                if success:
+                    st.session_state["session_additions"] += 1
+                    st.session_state["manual_form_version"] += 1
+                    st.toast(f"Saved {payload['company_name']} to PostgreSQL!", icon="✅")
+                    st.rerun()
+                else:
+                    st.error(f"Error: {msg}")
+
+    with b_col4:
+        if st.button("⚡ Save & Queue for Scoring", use_container_width=True, type="primary"):
+            payload = build_lead_payload()
+            if payload:
+                success, msg = create_lead_api(payload)
+                if success:
+                    st.session_state["session_additions"] += 1
+                    st.session_state["manual_form_version"] += 1
+                    st.toast(f"Committed & queued {payload['company_name']}!", icon="⚡")
+                    st.rerun()
+                else:
+                    st.error(f"Error: {msg}")
+</file>
+
+<file path="components/outreach_studio.py">
+import streamlit as st
+from frontend.utils.api_client import (
+    fetch_lead_dossier_api,
+    fetch_scoring_queue_api,
+    generate_outreach_api,
+)
+
+
+def render_outreach_studio():
+    """Renders the AI Cold Outreach Generation Studio (Wireframe B)."""
+    
+    st.markdown(
+        """
+        <div style="margin-bottom: 16px;">
+            <h3 class="sg-title" style="font-size: 20px;">Personalized AI Outreach Studio</h3>
+            <p class="sg-subtitle">Synthesize prospect intelligence, tech stack, and pain points into high-converting emails.</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    queue = fetch_scoring_queue_api()
+    if not queue:
+        with st.container(border=True):
+            st.info("No leads available. Please ingest and score leads first.")
+        return
+
+    # Select target prospect
+    lead_options = {f"{q['company_name']} — {q['contact_name']} ({q['priority'].upper()})": q["lead_id"] for q in queue}
+    
+    # Pre-select if forwarded from Scoring Hub
+    preselect_id = st.session_state.get("outreach_target_lead_id")
+    default_idx = 0
+    if preselect_id:
+        for idx, (_, lid) in enumerate(lead_options.items()):
+            if lid == preselect_id:
+                default_idx = idx
+                break
+
+    selected_label = st.selectbox("Target Prospect", options=list(lead_options.keys()), index=default_idx)
+    target_id = lead_options[selected_label]
+
+    dossier = fetch_lead_dossier_api(target_id)
+    if not dossier:
+        return
+
+    # Two Column Studio: Left Strategy (1.5) | Right Draft Editor (2.5)
+    s_col1, s_col2 = st.columns([1.6, 2.4])
+
+    # --- LEFT PANE: STRATEGY CONTROLS ---
+    with s_col1:
+        with st.container(border=True):
+            st.markdown("<h4 style='margin:0 0 8px 0; font-size: 15px; font-weight: 600;'>Outreach Strategy & Angle</h4>", unsafe_allow_html=True)
+            
+            angle = st.selectbox(
+                "Value Angle / Hook",
+                options=[
+                    "Cloud Scale & Infrastructure Efficiency",
+                    "Pipeline Variance & Forecasting ROI",
+                    "Tech Stack Modernization",
+                ],
+            )
+
+            tone = st.radio(
+                "Tone & Style",
+                options=[
+                    "Consultative / Executive (Recommended)",
+                    "Direct & Punchy (Under 100 words)",
+                    "Problem-Centric / Metric-Driven",
+                ],
+            )
+
+            # Detected Context Chips
+            st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
+            st.caption("DETECTED CONTEXT SIGNALS")
+            
+            tech_str = ", ".join(dossier["tech_stack"][:3]) if dossier["tech_stack"] else "Modern Cloud"
+            st.markdown(
+                f"""
+                <div style="font-size: 12px; margin-bottom: 4px;">✔ <strong>Tech Fit:</strong> {tech_str}</div>
+                <div style="font-size: 12px; margin-bottom: 4px;">✔ <strong>Growth Stage:</strong> {dossier['funding_stage']}</div>
+                <div style="font-size: 12px; margin-bottom: 12px;">✔ <strong>Decision Maker:</strong> {dossier['contact_title']}</div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            custom_notes = st.text_area("Custom Rep Notes (Optional)", placeholder="e.g. Mention our recent benchmark with similar SaaS teams...", height=80)
+
+            if st.button("🔄 Generate / Refresh Draft", type="primary", use_container_width=True):
+                st.session_state["current_draft"] = generate_outreach_api(target_id, angle, tone, custom_notes)
+                st.rerun()
+
+    # --- RIGHT PANE: THE DRAFT EDITOR ---
+    with s_col2:
+        # Load draft from state or generate automatically
+        if "current_draft" not in st.session_state or st.session_state.get("draft_lead_id") != target_id:
+            st.session_state["current_draft"] = generate_outreach_api(target_id, angle, tone, custom_notes)
+            st.session_state["draft_lead_id"] = target_id
+
+        draft = st.session_state.get("current_draft")
+
+        with st.container(border=True):
+            st.markdown("<h4 style='margin:0 0 8px 0; font-size: 15px; font-weight: 600;'>Generated Cold Email</h4>", unsafe_allow_html=True)
+
+            if draft:
+                # Subject Variant Selector
+                subject_choice = st.selectbox("Subject Line Variant", options=draft["subject_options"], index=0)
+
+                # Editable Email Body
+                edited_body = st.text_area("Email Body", value=draft["body"], height=280)
+
+                st.markdown(
+                    f"""
+                    <div style="display: flex; justify-content: space-between; font-size: 12px; opacity: 0.7; margin: 8px 0 16px 0;">
+                        <span>Hook Score: <strong>{draft['hook_score']} / 100</strong></span>
+                        <span>Estimated Word Count: <strong>{len(edited_body.split())} words</strong></span>
+                        <span>Status: <strong>Draft</strong></span>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                # Action Bar
+                a1, a2, a3 = st.columns([1.5, 1.5, 2])
+                with a1:
+                    if st.button("📋 Copy Text", use_container_width=True):
+                        st.toast("Email body copied to clipboard!", icon="📋")
+
+                with a2:
+                    if st.button("💾 Save as Draft", use_container_width=True):
+                        st.toast("Draft saved to PostgreSQL account record!", icon="💾")
+
+                with a3:
+                    if st.button("🚀 Send Email (Simulate)", type="primary", use_container_width=True):
+                        st.toast(f"Outreach dispatched to {dossier['email']}!", icon="🚀")
+</file>
+
+<file path="components/scoring_hub.py">
+import streamlit as st
+from frontend.utils.api_client import (
+    batch_score_api,
+    fetch_lead_dossier_api,
+    fetch_scoring_queue_api,
+    score_lead_api,
+)
+
+
+def render_scoring_hub():
+    """Renders the Master-Detail Lead Scoring & Intelligence Hub (Wireframe A)."""
+    
+    st.markdown(
+        """
+        <div style="margin-bottom: 16px;">
+            <h3 class="sg-title" style="font-size: 20px;">Predictive Lead Scoring & Intelligence</h3>
+            <p class="sg-subtitle">Evaluate prospect viability via firmographic fit, tech alignment, and growth velocity.</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    queue = fetch_scoring_queue_api()
+    if not queue:
+        with st.container(border=True):
+            st.info("No leads available in PostgreSQL. Ingest prospects in Tab 1 to begin scoring.")
+        return
+
+    # Master-Detail Split: Left Queue (1.5) | Right Dossier (2.5)
+    left_col, right_col = st.columns([1.6, 2.4])
+
+    # --- LEFT PANE: LEAD QUEUE ---
+    with left_col:
+        with st.container(border=True):
+            st.markdown("<h4 style='margin:0 0 8px 0; font-size: 15px; font-weight: 600;'>Prospect Priority Queue</h4>", unsafe_allow_html=True)
+            
+            search_query = st.text_input("Search Queue", placeholder="🔍 Search prospect...", label_visibility="collapsed")
+            
+            f_col1, f_col2 = st.columns(2)
+            with f_col1:
+                tier_filter = st.selectbox("Priority Tier", ["All Tiers", "Hot (≥ 75)", "Warm (40-74)", "Cold (< 40)", "Unscored"], label_visibility="collapsed")
+            with f_col2:
+                unscored_count = sum(1 for q in queue if q["priority"] == "unscored")
+                if st.button(f"⚡ Batch Score ({unscored_count})", use_container_width=True, disabled=(unscored_count == 0)):
+                    done = batch_score_api()
+                    st.toast(f"Scored {done} leads successfully!", icon="✅")
+                    st.rerun()
+
+            # Filter logic
+            filtered_queue = queue
+            if search_query:
+                q_low = search_query.lower()
+                filtered_queue = [q for q in filtered_queue if q_low in q["company_name"].lower() or q_low in q["contact_name"].lower()]
+
+            if tier_filter == "Hot (≥ 75)":
+                filtered_queue = [q for q in filtered_queue if q["priority"] == "hot"]
+            elif tier_filter == "Warm (40-74)":
+                filtered_queue = [q for q in filtered_queue if q["priority"] == "warm"]
+            elif tier_filter == "Cold (< 40)":
+                filtered_queue = [q for q in filtered_queue if q["priority"] == "cold"]
+            elif tier_filter == "Unscored":
+                filtered_queue = [q for q in filtered_queue if q["priority"] == "unscored"]
+
+            st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
+
+            # Selected lead state
+            if "selected_lead_id" not in st.session_state and filtered_queue:
+                st.session_state["selected_lead_id"] = filtered_queue[0]["lead_id"]
+
+            for lead in filtered_queue:
+                is_selected = (lead["lead_id"] == st.session_state.get("selected_lead_id"))
+                
+                # Priority Pill formatting
+                if lead["priority"] == "hot":
+                    pill_html = f"<span class='sg-pill sg-pill-teal'>🔥 {lead['score']} HOT</span>"
+                elif lead["priority"] == "warm":
+                    pill_html = f"<span class='sg-pill' style='background:#FEF3C7; color:#B45309;'>🌤️ {lead['score']} WARM</span>"
+                elif lead["priority"] == "cold":
+                    pill_html = f"<span class='sg-pill sg-pill-slate'>❄️ {lead['score']} COLD</span>"
+                else:
+                    pill_html = "<span class='sg-pill sg-pill-slate'>⚪ UNSCORED</span>"
+
+                selected_border = "border: 2px solid #0F766E;" if is_selected else ""
+                
+                card_html = f"""
+                <div style="padding: 10px 14px; margin-bottom: 8px; border-radius: 8px; background: rgba(125,125,125,0.05); {selected_border} display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <div style="font-weight: 600; font-size: 14px;">{lead['company_name']}</div>
+                        <div style="font-size: 12px; opacity: 0.7;">{lead['contact_name']} • {lead['funding_stage']}</div>
+                    </div>
+                    <div>{pill_html}</div>
+                </div>
+                """
+                st.markdown(card_html, unsafe_allow_html=True)
+                if st.button(f"Inspect {lead['company_name']}", key=f"sel_{lead['lead_id']}", use_container_width=True):
+                    st.session_state["selected_lead_id"] = lead["lead_id"]
+                    st.rerun()
+
+    # --- RIGHT PANE: THE AI LEAD DOSSIER ---
+    with right_col:
+        sel_id = st.session_state.get("selected_lead_id")
+        dossier = fetch_lead_dossier_api(sel_id) if sel_id else None
+
+        if not dossier:
+            with st.container(border=True):
+                st.caption("Select a lead from the queue on the left to inspect its AI Dossier.")
+            return
+
+        scoring = dossier["scoring"]
+        insights = dossier["insights"]
+
+        with st.container(border=True):
+            # Header info
+            st.markdown(
+                f"""
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                    <div>
+                        <h3 style="margin: 0; font-size: 18px; font-weight: 700;">{dossier['company_name']}</h3>
+                        <p style="margin: 2px 0 0 0; font-size: 13px; opacity: 0.8;">{dossier['contact_name']} • {dossier['contact_title']} • {dossier['location']}</p>
+                    </div>
+                    <span class="sg-pill sg-pill-teal">PostgreSQL ID #{dossier['lead_id']}</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            # Score & Win Probability Gauges
+            kpi1, kpi2 = st.columns(2)
+            with kpi1:
+                with st.container(border=True):
+                    st.caption("LEAD PREDICTIVE SCORE")
+                    st.markdown(f"<h2 style='margin:0; font-weight: 700; color: #0F766E;'>{scoring['score']} / 100</h2>", unsafe_allow_html=True)
+                    st.markdown(f"<span class='sg-pill sg-pill-teal'>Priority: {scoring['priority'].upper()}</span>", unsafe_allow_html=True)
+
+            with kpi2:
+                with st.container(border=True):
+                    st.caption("EST. CONVERSION PROBABILITY")
+                    st.markdown(f"<h2 style='margin:0; font-weight: 700;'>{scoring['conversion_probability']}%</h2>", unsafe_allow_html=True)
+                    st.caption("Benchmark Avg: 22.4%")
+
+            st.markdown("<hr style='margin: 14px 0;'/>", unsafe_allow_html=True)
+
+            # Factor Breakdown (Glass Box AI)
+            st.markdown("<h5 style='margin: 0 0 8px 0; font-size: 14px; font-weight: 600;'>Scoring Factor Breakdown</h5>", unsafe_allow_html=True)
+            for _, f_data in scoring["factors"].items():
+                ratio = f_data["score"] / f_data["max"]
+                c_lbl, c_bar = st.columns([2, 3])
+                c_lbl.markdown(f"<div style='font-size: 12px;'>{f_data['label']}</div>", unsafe_allow_html=True)
+                with c_bar:
+                    st.progress(ratio, text=f"{f_data['score']} / {f_data['max']} pts")
+
+            st.markdown("<hr style='margin: 14px 0;'/>", unsafe_allow_html=True)
+
+            # AI Company Intelligence
+            st.markdown("<h5 style='margin: 0 0 8px 0; font-size: 14px; font-weight: 600;'>AI Company Intelligence & Fit</h5>", unsafe_allow_html=True)
+            
+            st.markdown(
+                f"""
+                <div style="background: rgba(125,125,125,0.06); padding: 10px 14px; border-radius: 6px; margin-bottom: 8px;">
+                    <div style="font-size: 11px; font-weight: 600; color: #0F766E; text-transform: uppercase;">Business Needs & Friction</div>
+                    <div style="font-size: 13px; margin-top: 2px;">{insights['business_needs']}</div>
+                </div>
+                <div style="background: rgba(125,125,125,0.06); padding: 10px 14px; border-radius: 6px; margin-bottom: 14px;">
+                    <div style="font-size: 11px; font-weight: 600; color: #0F766E; text-transform: uppercase;">Value Proposition Fit</div>
+                    <div style="font-size: 13px; margin-top: 2px;">{insights['opportunities']}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            # Bottom Action Bar
+            act1, act2 = st.columns([1.5, 2.5])
+            with act1:
+                if st.button("🔄 Rescore Lead", use_container_width=True):
+                    score_lead_api(sel_id)
+                    st.toast("Recalculated score and insights!", icon="✅")
+                    st.rerun()
+
+            with act2:
+                if st.button("✉️ Generate Personalized Outreach ➡️", type="primary", use_container_width=True):
+                    # Set selected lead for outreach studio and switch tab
+                    st.session_state["outreach_target_lead_id"] = sel_id
+                    st.session_state["active_nav_tab"] = "✉️ Cold Outreach"
+                    st.rerun()
+</file>
+
+<file path="components/staging_feed.py">
+import io
+import pandas as pd
+import streamlit as st
+
+from frontend.utils.api_client import fetch_leads_api
+
+
+def render_staging_feed():
+    """Renders Wireframe 3: Live database lead feed with search, filtering, and export."""
+    st.markdown(
+        """
+        <div style="margin-top: 20px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: flex-end;">
+            <div>
+                <h3 style="margin: 0; font-size: 18px; font-weight: 700;">Recently Ingested Leads</h3>
+                <p style="margin: 2px 0 0 0; font-size: 13px; opacity: 0.7;">
+                    Verified prospect records stored in PostgreSQL, ready for AI qualification.
+                </p>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    with st.container(border=True):
+        # Search & Filter Toolbar
+        f_col1, f_col2, f_col3, f_col4 = st.columns([3.5, 2, 1.5, 1], vertical_alignment="center")
+
+        with f_col1:
+            search_query = st.text_input(
+                "Search leads",
+                placeholder="🔍 Search company, contact, or email...",
+                label_visibility="collapsed",
+            )
+
+        with f_col2:
+            sources_present = ["All Sources", "CSV", "Sales Entry", "LinkedIn", "Website Form", "CRM"]
+            selected_source = st.selectbox(
+                "Filter Source",
+                options=sources_present,
+                label_visibility="collapsed",
+            )
+
+        # Fetch records dynamically from FastAPI
+        records = fetch_leads_api(search=search_query, source=selected_source)
+
+        with f_col3:
+            if records:
+                export_df = pd.DataFrame(records)
+                csv_buffer = io.StringIO()
+                export_df.to_csv(csv_buffer, index=False)
+                st.download_button(
+                    label="⬇️ Export CSV",
+                    data=csv_buffer.getvalue(),
+                    file_name="salesgenie_leads_export.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                )
+            else:
+                st.button("⬇️ Export CSV", disabled=True, use_container_width=True)
+
+        with f_col4:
+            if st.button("🔄", use_container_width=True, help="Refresh database feed"):
+                st.rerun()
+
+        # Empty State
+        if not records:
+            st.markdown(
+                """
+                <div style="text-align: center; padding: 28px 16px;">
+                    <div style="font-size: 28px; margin-bottom: 6px;">📋</div>
+                    <div style="font-size: 14px; font-weight: 600;">No matching leads in database</div>
+                    <div style="font-size: 12px; opacity: 0.7; margin-top: 4px;">
+                        Upload a CSV in Tab 1 or save a single lead in Tab 2 to populate the database.
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            return
+
+        # Prepare DataFrame for clean presentation
+        df = pd.DataFrame(records)
+
+        # Convert tech_stack list to comma-separated string for display
+        if "tech_stack" in df.columns:
+            df["tech_stack"] = df["tech_stack"].apply(
+                lambda x: ", ".join(x) if isinstance(x, list) else (str(x) if pd.notna(x) else "-")
+            )
+
+        # Status Summary Bar
+        st.markdown(
+            f"""
+            <div style="display: flex; gap: 10px; margin: 10px 0; font-size: 12px;">
+                <span class="sg-pill sg-pill-teal">Total Results: {len(df)}</span>
+                <span class="sg-pill sg-pill-slate">Stage: New Leads</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # Display Data Table
+        st.dataframe(
+            df,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "lead_id": st.column_config.NumberColumn("ID", width="small"),
+                "company_name": st.column_config.TextColumn("Company", width="medium"),
+                "contact_name": st.column_config.TextColumn("Contact", width="medium"),
+                "contact_title": st.column_config.TextColumn("Title", width="medium"),
+                "email": st.column_config.TextColumn("Email", width="medium"),
+                "industry": st.column_config.TextColumn("Industry", width="medium"),
+                "funding_stage": st.column_config.TextColumn("Round", width="small"),
+                "tech_stack": st.column_config.TextColumn("Tech Stack", width="medium"),
+                "source": st.column_config.TextColumn("Source", width="small"),
+                "lead_status": st.column_config.TextColumn("Status", width="small"),
+                "created_at": st.column_config.DatetimeColumn("Ingested At", format="YYYY-MM-DD HH:mm"),
+            },
+        )
+</file>
+
+<file path="styles/__init__.py">
+
+</file>
+
+<file path="styles/themes.py">
+import streamlit as st
+
+THEME_TOKENS = {
+    "dark": {
+        # Layered blue-slate surfaces with a low-saturation teal accent.
+        "canvas_bg": "#101827",
+        "card_bg": "#172235",
+        "card_border": "#2A3850",
+        "text_primary": "#F4F7FB",
+        "text_secondary": "#A9B6C8",
+        "accent": "#5EEAD4",
+        "btn_primary_bg": "#0F766E",
+        "btn_primary_hover": "#14B8A6",
+        "btn_sec_bg": "#1E2A3D",
+        "btn_sec_border": "#3A4A63",
+        "btn_sec_text": "#E6EDF5",
+        # Form inputs use a distinct surface so they remain easy to scan.
+        "input_bg": "#1B2A40",
+        "input_border": "#3A4A63",
+        "input_text": "#F4F7FB",
+        "input_placeholder": "#8B9AB0",
+        # Muted teal tags preserve emphasis without glowing against the canvas.
+        "tag_bg": "#123B40",
+        "tag_text": "#7DE3D1",
+        "tag_border": "#1C6A6B",
+        # Pills & Banners
+        "pill_teal_bg": "#123B40",
+        "pill_teal_text": "#7DE3D1",
+        "pill_teal_border": "#1C6A6B",
+        "pill_slate_bg": "#1E2A3D",
+        "pill_slate_text": "#A9B6C8",
+        "pill_slate_border": "#3A4A63",
+        "banner_bg": "#123B40",
+        "banner_border": "#1C6A6B",
+        "banner_text": "#7DE3D1",
+        # Top Navbar
+        "nav_bg": "#172235",
+        "nav_border": "#2A3850",
+        "nav_active_bg": "#22314A",
+        "nav_active_text": "#7DE3D1",
+    },
+    "light": {
+        # Canvas & Cards
+        "canvas_bg": "#F4F5F7",
+        "card_bg": "#FFFFFF",
+        "card_border": "#E5E7EB",
+        "text_primary": "#111827",
+        "text_secondary": "#6B7280",
+        "accent": "#0F766E",
+        "btn_primary_bg": "#0F766E",
+        "btn_primary_hover": "#115E59",
+        "btn_sec_bg": "#FFFFFF",
+        "btn_sec_border": "#D1D5DB",
+        "btn_sec_text": "#374151",
+        # Form Inputs (Clean White)
+        "input_bg": "#FFFFFF",
+        "input_border": "#D1D5DB",
+        "input_text": "#111827",
+        "input_placeholder": "#9CA3AF",
+        # Multiselect Tags (Soft Sky Blue)
+        "tag_bg": "#E0F2FE",
+        "tag_text": "#0369A1",
+        "tag_border": "#BAE6FD",
+        # Pills & Banners
+        "pill_teal_bg": "#ECFDF5",
+        "pill_teal_text": "#047857",
+        "pill_teal_border": "#A7F3D0",
+        "pill_slate_bg": "#F1F5F9",
+        "pill_slate_text": "#475569",
+        "pill_slate_border": "#E2E8F0",
+        "banner_bg": "#F0FDFA",
+        "banner_border": "#CCFBF1",
+        "banner_text": "#0F766E",
+        # Top Navbar
+        "nav_bg": "#FFFFFF",
+        "nav_border": "#E5E7EB",
+        "nav_active_bg": "#F3F4F6",
+        "nav_active_text": "#0F766E",
+    },
+}
+
+
+def apply_theme():
+    """Injects high-specificity CSS rules covering all inputs, cards, and tags."""
+    mode = st.session_state.get("theme_mode", "dark")
+    t = THEME_TOKENS[mode]
+
+    st.markdown(
+        f"""
+        <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+        /* 1. Global Reset & Canvas */
+        [data-testid="stAppViewContainer"], 
+        [data-testid="stHeader"],
+        .stApp {{
+            background-color: {t['canvas_bg']} !important;
+            font-family: 'Inter', -apple-system, sans-serif !important;
+            color: {t['text_primary']} !important;
+        }}
+
+        header[data-testid="stHeader"], .stDeployButton, #MainMenu, footer {{
+            display: none !important;
+            visibility: hidden !important;
+        }}
+
+        .block-container {{
+            max-width: 1240px !important;
+            padding-top: 1.25rem !important;
+            padding-bottom: 3rem !important;
+        }}
+
+        /* Shared Streamlit text defaults */
+        [data-testid="stAppViewContainer"] p,
+        [data-testid="stAppViewContainer"] span,
+        [data-testid="stAppViewContainer"] label,
+        [data-testid="stAppViewContainer"] [data-testid="stCaptionContainer"] {{
+            color: {t['text_primary']};
+        }}
+        [data-testid="stCaptionContainer"],
+        [data-testid="stCaptionContainer"] p,
+        [data-testid="stWidgetLabel"] label,
+        [data-testid="stWidgetLabel"] p {{
+            color: {t['text_secondary']} !important;
+        }}
+
+        /* 2. Top Navigation Bar */
+        .sg-nav-container {{
+            background: {t['nav_bg']};
+            border: 1px solid {t['nav_border']};
+            border-radius: 8px;
+            padding: 8px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }}
+        .sg-nav-brand {{
+            font-size: 15px;
+            font-weight: 700;
+            color: {t['text_primary']};
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }}
+        .sg-nav-links {{
+            display: flex;
+            gap: 8px;
+        }}
+        .sg-nav-link {{
+            font-size: 13px;
+            font-weight: 500;
+            color: {t['text_secondary']};
+            padding: 5px 12px;
+            border-radius: 6px;
+            text-decoration: none;
+        }}
+        .sg-nav-active {{
+            color: {t['nav_active_text']} !important;
+            background-color: {t['nav_active_bg']} !important;
+            font-weight: 600;
+        }}
+
+        /* 3. Cards & Border Containers */
+        [data-testid="stVerticalBlockBorderWrapper"],
+        [data-testid="stVerticalBlockBorderWrapper"] > div {{
+            background-color: {t['card_bg']} !important;
+            border-color: {t['card_border']} !important;
+            border-radius: 10px !important;
+        }}
+
+        /* 4. Complete Form Input Styling (Fixes the white blocks in Dark Mode) */
+        /* Text input outer wrappers & inner elements */
+        div[data-baseweb="input"],
+        div[data-baseweb="base-input"],
+        [data-testid="stTextInput"] div[data-baseweb="input"],
+        [data-testid="stTextInput"] div[data-baseweb="base-input"] {{
+            background-color: {t['input_bg']} !important;
+            border-color: {t['input_border']} !important;
+            box-shadow: inset 0 0 0 1px {t['input_border']} !important;
+            border-radius: 6px !important;
+        }}
+        
+        /* The actual <input> element text and background */
+        [data-testid="stTextInput"] input,
+        div[data-baseweb="input"] input,
+        div[data-baseweb="base-input"] input {{
+            background-color: {t['input_bg']} !important;
+            color: {t['input_text']} !important;
+            -webkit-text-fill-color: {t['input_text']} !important;
+            font-size: 14px !important;
+        }}
+        
+        [data-testid="stTextInput"] input::placeholder,
+        div[data-baseweb="input"] input::placeholder {{
+            color: {t['input_placeholder']} !important;
+            -webkit-text-fill-color: {t['input_placeholder']} !important;
+        }}
+
+        /* Selectboxes (Dropdowns) */
+        div[data-baseweb="select"],
+        div[data-baseweb="select"] > div,
+        div[data-baseweb="select"] [aria-expanded] {{
+            background-color: {t['input_bg']} !important;
+            border-color: {t['input_border']} !important;
+            color: {t['input_text']} !important;
+            box-shadow: inset 0 0 0 1px {t['input_border']} !important;
+            border-radius: 6px !important;
+        }}
+        div[data-baseweb="select"] *,
+        div[data-baseweb="select"] input {{
+            background-color: transparent !important;
+            color: {t['input_text']} !important;
+        }}
+        div[data-baseweb="select"] svg {{
+            fill: {t['text_secondary']} !important;
+        }}
+
+        /* Dropdown menus render in a portal outside the widget container. */
+        [data-baseweb="popover"],
+        [data-baseweb="menu"],
+        ul[role="listbox"],
+        div[role="listbox"] {{
+            background-color: {t['card_bg']} !important;
+            border: 1px solid {t['card_border']} !important;
+            color: {t['text_primary']} !important;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28) !important;
+        }}
+        [data-baseweb="popover"] [role="option"],
+        [data-baseweb="menu"] [role="option"],
+        ul[role="listbox"] [role="option"],
+        div[role="listbox"] [role="option"] {{
+            background-color: {t['card_bg']} !important;
+            color: {t['text_primary']} !important;
+        }}
+        [data-baseweb="popover"] [role="option"]:hover,
+        [data-baseweb="menu"] [role="option"]:hover,
+        ul[role="listbox"] [role="option"]:hover,
+        div[role="listbox"] [role="option"]:hover,
+        [role="option"][aria-selected="true"] {{
+            background-color: {t['nav_active_bg']} !important;
+            color: {t['text_primary']} !important;
+        }}
+        [data-baseweb="popover"] [role="option"] *,
+        [data-baseweb="menu"] [role="option"] *,
+        [role="listbox"] [role="option"] * {{
+            background-color: transparent !important;
+            color: inherit !important;
+        }}
+
+        /* Multiselect container */
+        [data-testid="stMultiSelect"] div[data-baseweb="select"] > div {{
+            background-color: {t['input_bg']} !important;
+            border-color: {t['input_border']} !important;
+        }}
+
+        /* Multiselect tags/chips */
+        div[data-baseweb="tag"],
+        span[data-baseweb="tag"] {{
+            background-color: {t['tag_bg']} !important;
+            border: 1px solid {t['tag_border']} !important;
+            border-radius: 4px !important;
+            color: {t['tag_text']} !important;
+        }}
+        div[data-baseweb="tag"] *,
+        span[data-baseweb="tag"] * {{
+            background-color: transparent !important;
+            color: {t['tag_text']} !important;
+            fill: {t['tag_text']} !important;
+        }}
+
+        /* Input Labels & Captions */
+        div[data-testid="stWidgetLabel"] label,
+        div[data-testid="stWidgetLabel"] p {{
+            color: {t['text_secondary']} !important;
+            font-size: 13px !important;
+            font-weight: 500 !important;
+        }}
+        [data-testid="stTextInput"] input:focus,
+        [data-testid="stSelectbox"] [data-baseweb="select"]:focus-within,
+        [data-testid="stMultiSelect"] [data-baseweb="select"]:focus-within {{
+            border-color: {t['accent']} !important;
+            box-shadow: inset 0 0 0 1px {t['accent']}, 0 0 0 1px {t['accent']} !important;
+        }}
+
+        /* 5. File uploader */
+        [data-testid="stFileUploader"] {{
+            color: {t['text_primary']} !important;
+        }}
+        [data-testid="stFileUploader"] section,
+        [data-testid="stFileUploaderDropzone"] {{
+            background: {t['input_bg']} !important;
+            border: 1px dashed {t['input_border']} !important;
+            border-radius: 8px !important;
+            padding: 1.25rem !important;
+        }}
+        [data-testid="stFileUploader"] section:hover,
+        [data-testid="stFileUploaderDropzone"]:hover {{
+            background: {t['nav_active_bg']} !important;
+            border-color: {t['accent']} !important;
+        }}
+        [data-testid="stFileUploader"] section *,
+        [data-testid="stFileUploaderDropzone"] * {{
+            color: {t['text_secondary']} !important;
+        }}
+        [data-testid="stFileUploader"] small,
+        [data-testid="stFileUploader"] [data-testid="stMarkdownContainer"] p {{
+            color: {t['text_secondary']} !important;
+        }}
+        [data-testid="stFileUploader"] button {{
+            background: {t['btn_sec_bg']} !important;
+            border: 1px solid {t['btn_sec_border']} !important;
+            color: {t['btn_sec_text']} !important;
+        }}
+        [data-testid="stFileUploader"] button:hover {{
+            background: {t['nav_active_bg']} !important;
+            border-color: {t['accent']} !important;
+            color: {t['text_primary']} !important;
+        }}
+        [data-testid="stFileUploader"] [data-testid="stFileUploaderFile"] {{
+            background: {t['card_bg']} !important;
+            border: 1px solid {t['card_border']} !important;
+            color: {t['text_primary']} !important;
+        }}
+        [data-testid="stFileUploader"] [data-testid="stFileUploaderFile"] * {{
+            color: {t['text_primary']} !important;
+        }}
+
+        /* 6. Tabs */
+        .stTabs [data-baseweb="tab-list"] {{
+            gap: 12px;
+            border-bottom: 1px solid {t['card_border']};
+            margin-bottom: 1.25rem;
+        }}
+        .stTabs [data-baseweb="tab"] {{
+            font-size: 14px !important;
+            font-weight: 600 !important;
+            color: {t['text_secondary']} !important;
+            padding: 8px 16px !important;
+        }}
+        .stTabs [aria-selected="true"] {{
+            color: {t['accent']} !important;
+        }}
+        [data-baseweb="tab-highlight"] {{
+            background-color: {t['accent']} !important;
+        }}
+
+        /* 7. Typography & Pills */
+        .sg-title {{
+            color: {t['text_primary']};
+            font-size: 24px;
+            font-weight: 700;
+            margin: 0;
+        }}
+        .sg-subtitle {{
+            color: {t['text_secondary']};
+            font-size: 14px;
+            margin: 4px 0 0 0;
+        }}
+        .sg-metric-accent {{
+            color: {t['accent']};
+            font-size: 12px;
+            font-weight: 500;
+        }}
+        .sg-pill {{
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 8px;
+            border-radius: 9999px;
+            font-size: 11px;
+            font-weight: 600;
+        }}
+        .sg-pill-teal {{
+            background-color: {t['pill_teal_bg']};
+            color: {t['pill_teal_text']};
+            border: 1px solid {t['pill_teal_border']};
+        }}
+        .sg-pill-slate {{
+            background-color: {t['pill_slate_bg']};
+            color: {t['pill_slate_text']};
+            border: 1px solid {t['pill_slate_border']};
+        }}
+        .sg-file-banner {{
+            background: {t['banner_bg']};
+            border: 1px solid {t['banner_border']};
+            color: {t['banner_text']};
+            padding: 8px 12px;
+            border-radius: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 14px 0;
+        }}
+
+        /* 8. Buttons */
+        button[kind="primary"] {{
+            background-color: {t['btn_primary_bg']} !important;
+            border: 1px solid {t['btn_primary_bg']} !important;
+            color: #FFFFFF !important;
+            font-weight: 600 !important;
+            border-radius: 6px !important;
+        }}
+        button[kind="primary"]:hover {{
+            background-color: {t['btn_primary_hover']} !important;
+            border-color: {t['btn_primary_hover']} !important;
+        }}
+        button[kind="secondary"] {{
+            background-color: {t['btn_sec_bg']} !important;
+            border: 1px solid {t['btn_sec_border']} !important;
+            color: {t['btn_sec_text']} !important;
+            font-weight: 500 !important;
+            border-radius: 6px !important;
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+</file>
+
+<file path="utils/__init__.py">
+
+</file>
+
+<file path="utils/api_client.py">
+import os
+import requests
+
+API_BASE_URL = os.environ.get("BACKEND_API_URL", "http://localhost:8000")
+
+
+def check_backend_health() -> bool:
+    try:
+        res = requests.get(f"{API_BASE_URL}/health", timeout=1.5)
+        return res.status_code == 200
+    except requests.RequestException:
+        return False
+
+
+def fetch_pipeline_stats() -> dict:
+    try:
+        res = requests.get(f"{API_BASE_URL}/api/leads/stats", timeout=2.0)
+        if res.status_code == 200:
+            return res.json()
+    except requests.RequestException:
+        pass
+    return {"total_leads": 0, "session_additions": 0, "ingestion_health": 98.4, "pending_ai_scoring": 0}
+
+
+def fetch_users() -> list[dict]:
+    try:
+        res = requests.get(f"{API_BASE_URL}/api/users", timeout=2.0)
+        if res.status_code == 200:
+            return res.json()
+    except requests.RequestException:
+        pass
+    return [{"user_id": 1, "name": "Alex Rep (Dev Mode)", "role": "Sales Representative"}]
+
+
+def create_lead_api(payload: dict) -> tuple[bool, str]:
+    try:
+        res = requests.post(f"{API_BASE_URL}/api/leads", json=payload, timeout=3.0)
+        if res.status_code == 201:
+            return True, "Lead saved to database successfully!"
+        error_detail = res.json().get("detail", res.text)
+        return False, error_detail
+    except requests.RequestException as e:
+        return False, f"Could not connect to backend: {e}"
+
+
+def bulk_import_api(leads: list[dict], skip_duplicates: bool = True) -> tuple[bool, dict | str]:
+    try:
+        payload = {"leads": leads, "skip_duplicates": skip_duplicates}
+        res = requests.post(f"{API_BASE_URL}/api/leads/bulk", json=payload, timeout=10.0)
+        if res.status_code == 201:
+            return True, res.json()
+        error_detail = res.json().get("detail", res.text)
+        return False, error_detail
+    except requests.RequestException as e:
+        return False, f"Could not connect to backend: {e}"
+
+
+def fetch_leads_api(search: str | None = None, source: str | None = None) -> list[dict]:
+    try:
+        params = {}
+        if search:
+            params["search"] = search
+        if source and source != "All Sources":
+            params["source"] = source
+        res = requests.get(f"{API_BASE_URL}/api/leads", params=params, timeout=3.0)
+        if res.status_code == 200:
+            return res.json()
+    except requests.RequestException:
+        pass
+    return []
+
+def fetch_scoring_queue_api() -> list[dict]:
+    try:
+        res = requests.get(f"{API_BASE_URL}/api/scoring/queue", timeout=3.0)
+        if res.status_code == 200:
+            return res.json()
+    except requests.RequestException:
+        pass
+    return []
+
+
+def fetch_lead_dossier_api(lead_id: int) -> dict | None:
+    try:
+        res = requests.get(f"{API_BASE_URL}/api/leads/{lead_id}/dossier", timeout=3.0)
+        if res.status_code == 200:
+            return res.json()
+    except requests.RequestException:
+        pass
+    return None
+
+
+def score_lead_api(lead_id: int) -> bool:
+    try:
+        res = requests.post(f"{API_BASE_URL}/api/leads/{lead_id}/score", timeout=5.0)
+        return res.status_code == 200
+    except requests.RequestException:
+        return False
+
+
+def batch_score_api() -> int:
+    try:
+        res = requests.post(f"{API_BASE_URL}/api/leads/score-batch", timeout=10.0)
+        if res.status_code == 200:
+            return res.json().get("scored_count", 0)
+    except requests.RequestException:
+        pass
+    return 0
+
+
+def generate_outreach_api(lead_id: int, angle: str, tone: str, custom_note: str = "") -> dict | None:
+    try:
+        payload = {"lead_id": lead_id, "angle": angle, "tone": tone, "custom_note": custom_note}
+        res = requests.post(f"{API_BASE_URL}/api/outreach/generate", json=payload, timeout=5.0)
+        if res.status_code == 200:
+            return res.json()
+    except requests.RequestException:
+        pass
+    return None
+</file>
+
+<file path="utils/csv_parser.py">
+import io
+import pandas as pd
+
+# The schema definition mapped directly to the PostgreSQL `leads` model
+TARGET_SCHEMA_FIELDS = {
+    "company_name": {"label": "Company Name", "required": True},
+    "email": {"label": "Work Email", "required": True},
+    "contact_name": {"label": "Contact Name", "required": False},
+    "contact_title": {"label": "Job Title", "required": False},
+    "industry": {"label": "Industry", "required": False},
+    "company_size": {"label": "Company Size / Headcount", "required": False},
+    "annual_revenue": {"label": "Annual Revenue", "required": False},
+    "funding_stage": {"label": "Funding Stage", "required": False},
+    "funding_raised": {"label": "Funding Raised", "required": False},
+    "location": {"label": "Location (HQ)", "required": False},
+    "tech_stack": {"label": "Tech Stack (Comma-separated)", "required": False},
+    "phone": {"label": "Phone Number", "required": False},
+    "source": {"label": "Lead Source", "required": False},
+}
+
+# Fuzzy synonym mapping for auto-detection
+COLUMN_SYNONYMS = {
+    "company_name": ["company", "company_name", "organization", "account", "business"],
+    "email": ["email", "work_email", "contact_email", "mail", "email_address"],
+    "contact_name": ["contact", "contact_name", "name", "full_name", "person"],
+    "contact_title": ["title", "job_title", "position", "role"],
+    "industry": ["industry", "sector", "vertical", "domain"],
+    "company_size": ["size", "company_size", "headcount", "employees", "team_size"],
+    "annual_revenue": ["revenue", "annual_revenue", "arr"],
+    "funding_stage": ["stage", "funding_stage", "round", "series"],
+    "funding_raised": ["funding", "raised", "funding_raised", "total_funding"],
+    "location": ["location", "city", "country", "headquarters", "hq"],
+    "tech_stack": ["tech", "technologies", "tech_stack", "stack", "tools"],
+    "phone": ["phone", "telephone", "mobile", "phone_number"],
+    "source": ["source", "lead_source", "origin", "channel"],
+}
+
+
+def auto_match_column(csv_col_name: str) -> str:
+    """Returns the best matching schema field name or 'ignore'."""
+    clean_col = csv_col_name.strip().lower().replace(" ", "_")
+    for target_key, synonyms in COLUMN_SYNONYMS.items():
+        if clean_col in synonyms:
+            return target_key
+    return "ignore"
+
+
+def generate_sample_csv() -> str:
+    """Generates sample CSV data matching the target leads schema."""
+    sample_data = {
+        "Company Name": ["Acme Cloud Corp", "DataSync Labs", "NexaCore AI"],
+        "Work Email": ["sarah@acmecloud.io", "alex.chen@datasync.com", "m.brody@nexacore.tech"],
+        "Contact Name": ["Sarah Jenkins", "Alex Chen", "Marcus Brody"],
+        "Job Title": ["VP of Engineering", "Chief Technology Officer", "Head of Product"],
+        "Industry": ["Cloud Infrastructure", "Enterprise Software", "Artificial Intelligence"],
+        "Company Size": ["250-500", "51-200", "501-1000"],
+        "Annual Revenue": ["$10M - $25M", "$5M - $10M", "$25M - $50M"],
+        "Funding Stage": ["Series B", "Series A", "Series B"],
+        "Funding Raised": ["$22M", "$8.5M", "$30M"],
+        "Location": ["San Francisco, CA", "Austin, TX", "New York, NY"],
+        "Tech Stack": ["AWS, Kubernetes, Python", "PostgreSQL, React, Snowflake", "GCP, PyTorch, Docker"],
+        "Phone": ["+1 415 555 0192", "+1 512 555 0143", "+1 212 555 0188"],
+    }
+    df = pd.DataFrame(sample_data)
+    return df.to_csv(index=False)
+</file>
+
+<file path="app.py">
+import streamlit as st
+
+# 1. Page Configuration
+st.set_page_config(
+    page_title="SalesGenie AI | Sales Forecasting & Intelligence",
+    page_icon="⚡",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
+
+# 2. Session State Initialization
+if "theme_mode" not in st.session_state:
+    st.session_state["theme_mode"] = "dark"
+if "session_additions" not in st.session_state:
+    st.session_state["session_additions"] = 0
+if "active_nav_tab" not in st.session_state:
+    st.session_state["active_nav_tab"] = "📊 Leads & Ingestion"
+
+from frontend.components.csv_uploader import render_csv_uploader
+from frontend.components.header import render_header
+from frontend.components.manual_form import render_manual_form
+from frontend.components.outreach_studio import render_outreach_studio
+from frontend.components.scoring_hub import render_scoring_hub
+from frontend.components.staging_feed import render_staging_feed
+from frontend.styles.themes import apply_theme
+
+# 3. Apply Theme
+apply_theme()
+
+# 4. Top Header & Live KPI Metrics
+render_header(session_additions=st.session_state["session_additions"])
+
+# 5. Core Workflow Tabs
+tabs = ["📊 Leads & Ingestion", "⚡ Predictive Scoring", "✉️ Cold Outreach"]
+
+# Sync tab selection
+default_index = tabs.index(st.session_state["active_nav_tab"]) if st.session_state["active_nav_tab"] in tabs else 0
+active_tab = st.radio("Navigation", options=tabs, index=default_index, horizontal=True, label_visibility="collapsed")
+st.session_state["active_nav_tab"] = active_tab
+
+st.markdown("<div style='margin-top: 8px;'></div>", unsafe_allow_html=True)
+
+# 6. View Routing
+if active_tab == "📊 Leads & Ingestion":
+    tab_bulk, tab_manual = st.tabs(["📁 Bulk CSV Import", "✏️ Manual Single Entry"])
+    with tab_bulk:
+        render_csv_uploader()
+    with tab_manual:
+        render_manual_form()
+    render_staging_feed()
+
+elif active_tab == "⚡ Predictive Scoring":
+    render_scoring_hub()
+
+elif active_tab == "✉️ Cold Outreach":
+    render_outreach_studio()
+</file>
+
+</files>

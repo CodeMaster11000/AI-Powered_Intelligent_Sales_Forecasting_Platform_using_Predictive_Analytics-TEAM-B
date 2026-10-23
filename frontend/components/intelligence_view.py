@@ -25,10 +25,10 @@ def render_intelligence_view():
 
     if analysis_mode == "📋 Analyze Ingested Database Lead":
         leads = fetch_leads_api(limit=50)
-        
+
         # If no backend leads, fallback to session state leads if available
         session_leads = st.session_state.get("recent_ingested_leads", [])
-        
+
         if not leads and not session_leads:
             st.info("ℹ️ No leads found in database or session yet. Upload a CSV or add a lead in Tab 1 or Tab 2, or use 'Ad-Hoc Prospect Evaluation' above.")
             return

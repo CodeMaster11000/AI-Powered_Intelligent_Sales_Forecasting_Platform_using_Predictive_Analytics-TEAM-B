@@ -1,0 +1,2099 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+backend/
+  database/
+    models/
+      __init__.py
+      company_insights.py
+      lead_scores.py
+      leads.py
+      users.py
+    __init__.py
+    database.py
+    SETUP.md
+  tests/
+    __init__.py
+  __init__.py
+  main.py
+docs/
+  api/
+    api-contract.md
+  design/
+    agents/
+      .gitkeep
+      README.md
+    database/
+      data-dictionary.md
+      er-diagram.dot
+      er-diagram.md
+      er-diagram.mmd
+      er-diagram.png
+      er-diagram.svg
+      README.md
+    wireframes/
+      .gitkeep
+      README.md
+  milestones/
+    milestone-1.md
+  srs/
+    SalesGenie_AI_SRS.pdf
+  testing/
+    README.md
+  README.md
+frontend/
+  app.py
+migrations/
+  versions/
+    9ca4d0d53e32_initial_schema.py
+  env.py
+  README
+  script.py.mako
+modules/
+  __init__.py
+  module1_leads.py
+  module2_intelligence.py
+  module3_outreach.py
+  module4_scoring.py
+  module5_conversation.py
+  module6_dashboard.py
+.env.example
+.gitignore
+alembic.ini
+app.py
+docker-compose.yml
+main.py
+README.md
+requirements-ai.txt
+requirements-dev.txt
+requirements.txt
+run_all.py
+SETUP.md
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="backend/database/models/__init__.py">
+from backend.database.models.company_insights import CompanyInsight
+from backend.database.models.lead_scores import LeadScore
+from backend.database.models.leads import Lead
+from backend.database.models.users import User
+
+__all__ = ["CompanyInsight", "LeadScore", "Lead", "User"]
+</file>
+
+<file path="backend/database/models/company_insights.py">
+from datetime import datetime
+from sqlalchemy import (BigInteger, CheckConstraint, DateTime, ForeignKey, Identity, Integer, Text, func,)
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from backend.database.database import Base
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from backend.database.models.leads import Lead
+
+
+class CompanyInsight(Base):
+    __tablename__ = "company_insights"
+    __table_args__ = (
+        CheckConstraint(
+            "qualification_score IS NULL OR qualification_score BETWEEN 0 AND 100",
+            name="ck_company_insights_score",
+        ),
+    )
+
+    insight_id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    lead_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("leads.lead_id", ondelete="CASCADE"))
+
+    business_needs: Mapped[str | None] = mapped_column(Text)
+    opportunities: Mapped[str | None] = mapped_column(Text)
+    industry_analysis: Mapped[str | None] = mapped_column(Text)
+    qualification_score: Mapped[int | None] = mapped_column(Integer)
+    growth_indicators: Mapped[str | None] = mapped_column(Text)
+    tech_alignment: Mapped[str | None] = mapped_column(Text)
+    decision_maker_summary: Mapped[str | None] = mapped_column(Text)
+
+    generated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    lead: Mapped["Lead"] = relationship(back_populates="insights")
+</file>
+
+<file path="backend/database/models/lead_scores.py">
+from datetime import datetime
+from decimal import Decimal
+from sqlalchemy import (BigInteger, CheckConstraint, DateTime, ForeignKey, Identity, Integer,Numeric, func)
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from backend.database.database import Base
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from backend.database.models.leads import Lead
+
+
+class LeadScore(Base):
+    __tablename__ = "lead_scores"
+    __table_args__ = (
+        CheckConstraint(
+            "lead_score BETWEEN 0 AND 100", name="ck_lead_scores_score"
+        ),
+        CheckConstraint(
+            "conversion_probability BETWEEN 0 AND 100",
+            name="ck_lead_scores_probability",
+        ),
+    )
+
+    score_id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    lead_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("leads.lead_id", ondelete="CASCADE"))
+    lead_score: Mapped[int] = mapped_column(Integer)
+    conversion_probability: Mapped[Decimal] = mapped_column(Numeric(5, 2))
+    generated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    lead: Mapped["Lead"] = relationship(back_populates="scores")
+</file>
+
+<file path="backend/database/models/leads.py">
+from datetime import datetime
+from typing import TYPE_CHECKING
+
+from sqlalchemy import (BigInteger, CheckConstraint, DateTime, ForeignKey, Identity, Text, func,)
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from backend.database.database import Base
+
+if TYPE_CHECKING:
+    from backend.database.models.company_insights import CompanyInsight
+    from backend.database.models.lead_scores import LeadScore
+    from backend.database.models.users import User
+
+
+LEAD_STATUSES = ("New Leads", "Qualified", "Proposal", "Negotiation", "Closed Won")
+SOURCES = ("CRM", "Website Form", "LinkedIn", "Sales Entry", "CSV")
+
+
+class Lead(Base):
+    __tablename__ = "leads"
+    __table_args__ = (
+        CheckConstraint(
+            "lead_status IN (" + ", ".join(f"'{s}'" for s in LEAD_STATUSES) + ")",
+            name="ck_leads_lead_status",
+        ),
+        CheckConstraint(
+            "source IN (" + ", ".join(f"'{s}'" for s in SOURCES) + ")",
+            name="ck_leads_source",
+        ),
+    )
+
+    lead_id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    owner_user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.user_id", ondelete="SET NULL")
+    )
+    company_name: Mapped[str] = mapped_column(Text)
+    industry: Mapped[str | None] = mapped_column(Text)
+    contact_name: Mapped[str | None] = mapped_column(Text)
+    contact_title: Mapped[str | None] = mapped_column(Text)
+    email: Mapped[str] = mapped_column(Text)
+    phone: Mapped[str | None] = mapped_column(Text)
+    lead_status: Mapped[str] = mapped_column(Text, server_default="New Leads")
+    source: Mapped[str] = mapped_column(Text)
+    company_size: Mapped[str | None] = mapped_column(Text)
+    annual_revenue: Mapped[str | None] = mapped_column(Text)
+    funding_stage: Mapped[str | None] = mapped_column(Text)
+    funding_raised: Mapped[str | None] = mapped_column(Text)
+    location: Mapped[str | None] = mapped_column(Text)
+    tech_stack: Mapped[list[str] | None] = mapped_column(JSONB)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    owner: Mapped["User | None"] = relationship(back_populates="leads")
+    insights: Mapped[list["CompanyInsight"]] = relationship(
+        back_populates="lead", cascade="all, delete-orphan", passive_deletes=True
+    )
+    scores: Mapped[list["LeadScore"]] = relationship(
+        back_populates="lead", cascade="all, delete-orphan", passive_deletes=True
+    )
+</file>
+
+<file path="backend/database/models/users.py">
+from datetime import datetime
+from sqlalchemy import (BigInteger, CheckConstraint, DateTime, Identity, Text, UniqueConstraint, func,)
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from typing import TYPE_CHECKING
+
+from backend.database.database import Base
+
+if TYPE_CHECKING:
+    from backend.database.models.leads import Lead
+ROLES = ("Sales Representative", "BDR", "Sales Manager", "RevOps")
+
+class User(Base):
+    __tablename__ = "users"
+    __table_args__ = (
+        CheckConstraint(
+            "role IN (" + ", ".join(f"'{r}'" for r in ROLES) + ")",
+            name="ck_users_role",
+        ),
+        UniqueConstraint("email", name="uq_users_email"),
+    )
+
+    user_id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    name: Mapped[str] = mapped_column(Text)
+    email: Mapped[str] = mapped_column(Text)
+    role: Mapped[str] = mapped_column(Text)
+    department: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    leads: Mapped[list["Lead"]] = relationship(back_populates="owner", passive_deletes=True)
+    #analytics: Mapped[list["SalesAnalytics"]] = relationship(back_populates="user", passive_deletes=True)
+</file>
+
+<file path="backend/database/__init__.py">
+
+</file>
+
+<file path="backend/database/database.py">
+import os
+
+from dotenv import load_dotenv
+from sqlalchemy import create_engine
+from sqlalchemy.engine import URL
+from sqlalchemy.orm import DeclarativeBase, sessionmaker
+
+load_dotenv()
+DB_USER     = os.environ.get("POSTGRES_USER", "salesgenie")
+DB_PASSWORD = os.environ.get("POSTGRES_PASSWORD", "salesgenie_dev")
+DB_NAME     = os.environ.get("POSTGRES_DB", "salesgenie")
+DB_HOST     = os.environ.get("POSTGRES_HOST", "localhost") 
+DB_PORT     = int(os.environ.get("DB_PORT", "5432"))         
+
+DATABASE_URL = URL.create(
+    drivername="postgresql+psycopg",
+    username=DB_USER,
+    password=DB_PASSWORD,
+    host=DB_HOST,
+    port=DB_PORT,
+    database=DB_NAME,
+)
+
+engine = create_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,
+    pool_recycle=1800,
+    echo=os.environ.get("SQL_ECHO") == "1",
+    connect_args={
+        "application_name": "salesgenie-api",
+        "options": "-c timezone=UTC",
+    },
+)
+
+SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+</file>
+
+<file path="backend/database/SETUP.md">
+# Database Setup
+
+SalesGenie uses PostgreSQL for its database and Alembic to manage schema migrations.
+
+The database tables are created through migrations. You do not need to create them manually.
+
+For general installation instructions, see the [main Setup Guide](../../SETUP.md).
+
+## Prerequisites
+
+- Complete the main project setup.
+- Docker and Docker Compose must be installed and running.
+- The Python virtual environment must be activated.
+- Run commands from the repository root.
+
+## 1. Start the Database
+
+```bash
+docker compose up -d db
+```
+
+Check the database status:
+
+```bash
+docker compose ps
+```
+
+Wait until the database is healthy before continuing.
+
+## 2. Initialize the Database
+
+Apply all pending migrations:
+
+```bash
+alembic upgrade head
+```
+
+This creates the required tables and updates the database to the latest migration version.
+
+You only need to run this again when new migrations have been added.
+
+## 3. Verify the Database
+
+Open a PostgreSQL shell:
+
+```bash
+docker compose exec db psql -U salesgenie -d salesgenie
+```
+
+List the tables:
+
+```sql
+\dt
+```
+
+Inspect a table:
+
+```sql
+\d leads
+```
+
+Exit the shell:
+
+```sql
+\q
+```
+
+The tables depend on the committed migrations. You should also see `alembic_version`, which tracks the current migration revision.
+
+## 4. Common Commands
+
+| Task | Command |
+|---|---|
+| Start the database | `docker compose up -d db` |
+| Stop containers | `docker compose down` |
+| View database logs | `docker compose logs -f db` |
+| Check current migration | `alembic current` |
+| View migration history | `alembic history` |
+| Apply pending migrations | `alembic upgrade head` |
+
+Stopping containers with `docker compose down` normally preserves the database volume and its data.
+
+## 5. Making Database Changes
+
+Database schema changes should be coordinated with the person responsible for the database.
+
+The usual workflow is:
+
+1. Update the relevant SQLAlchemy model in `backend/database/models/`.
+2. Generate a migration:
+
+   ```bash
+   alembic revision --autogenerate -m "describe the change"
+   ```
+
+3. Review the generated file in `migrations/versions/`.
+4. Apply the migration:
+
+   ```bash
+   alembic upgrade head
+   ```
+
+5. Commit the model changes and migration file together.
+
+Do not manually create tables or use `Base.metadata.create_all()` to initialize the database. Use Alembic migrations instead.
+
+## Troubleshooting
+
+### Database connection refused
+
+Check that the database is running:
+
+```bash
+docker compose ps
+docker compose logs db
+```
+
+Wait for PostgreSQL to become healthy and check your database configuration.
+
+### Port 5432 is already in use
+
+If another PostgreSQL instance is using port 5432, configure a different host port in the root `.env` file, provided the Compose configuration supports `DB_PORT`.
+
+For example:
+
+```ini
+DB_PORT=5433
+```
+
+Restart the database if necessary.
+
+### Tables are missing
+
+Run the migration command from the repository root:
+
+```bash
+alembic upgrade head
+```
+
+If the problem persists, check the migration history and database connection settings.
+
+### Python cannot find the backend module
+
+Make sure the virtual environment is activated and your terminal is in the repository root.
+
+---
+
+For installation, environment configuration, and running the application, see the [main Setup Guide](../../SETUP.md).
+</file>
+
+<file path="backend/tests/__init__.py">
+
+</file>
+
+<file path="backend/__init__.py">
+
+</file>
+
+<file path="backend/main.py">
+
+</file>
+
+<file path="docs/api/api-contract.md">
+# API contract
+
+Agree on this before anyone builds against it (Day 2). Update it in the same PR that changes an endpoint.
+
+| Method | Path | Purpose | Request | Response | Owner |
+|--------|------|---------|---------|----------|-------|
+|        |      |         |         |          |       |
+
+## Conventions
+- Base URL: http://localhost:8000
+- Error format:
+- Status codes used:
+</file>
+
+<file path="docs/design/agents/.gitkeep">
+
+</file>
+
+<file path="docs/design/agents/README.md">
+# Agent architecture
+
+LangGraph agent design (Research, Qualification, Outreach, CRM Update, Follow-Up).
+Design only for now; implementation starts in later milestones.
+</file>
+
+<file path="docs/design/wireframes/.gitkeep">
+
+</file>
+
+<file path="docs/design/wireframes/README.md">
+# UI wireframes
+
+Streamlit screens for Milestone 1: Leads tab, import summary, lead detail (score + insights).
+Export images here and link them from the PR that implements each screen.
+</file>
+
+<file path="docs/milestones/milestone-1.md">
+# Milestone 1: Lead Management & Intelligence Engine
+
+Scope: Modules 1 and 2 of the SRS.
+
+## Acceptance (SRS 5.3)
+- [ ] Ingest, parse and analyze at least 95% of imported prospect records across all 5 ingestion vectors
+- [ ] Company profile summaries are accurate, no field corruption
+- Validation: automated ingestion tests + database schema integrity audit
+
+## Requirements covered
+- [ ] REQ-M1-01 Record creation and editing
+- [ ] REQ-M1-02 Multi-vector data ingestion
+- [ ] REQ-M1-03 Lifecycle stage tracking
+- [ ] REQ-M2-01 Automated company profiling
+- [ ] REQ-M2-02 Business opportunity identification
+- [ ] REQ-M2-03 Intelligence summary output
+
+## Deliverables
+- [ ] Prospect CRUD API + company analysis service
+- [ ] Lead import module + Leads UI + qualification score
+- [ ] Sample dataset (data/sample)
+- [ ] Unit test results + Milestone 1 test report
+- [ ] Demo build (Day 8) and sign-off (Day 9)
+</file>
+
+<file path="docs/testing/README.md">
+# Testing
+
+- `test-plan.md`: what is tested and how
+- `milestone-1-test-report.md`: test cases with expected vs actual, pass/fail, ingestion success rate, known issues
+</file>
+
+<file path="docs/README.md">
+# Docs
+
+- srs/ : the SRS (source of truth for requirements)
+- design/ : database, wireframes, agent architecture
+- api/ : API contract
+- testing/ : test plan and reports
+- milestones/ : per-milestone checklists
+</file>
+
+<file path="frontend/app.py">
+
+</file>
+
+<file path="migrations/versions/9ca4d0d53e32_initial_schema.py">
+"""initial schema
+
+Revision ID: 9ca4d0d53e32
+Revises: 
+Create Date: 2026-10-18 22:23:10.685598
+
+"""
+from typing import Sequence, Union
+
+from alembic import op
+import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
+
+# revision identifiers, used by Alembic.
+revision: str = '9ca4d0d53e32'
+down_revision: Union[str, Sequence[str], None] = None
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
+
+
+def upgrade() -> None:
+    """Upgrade schema."""
+    # ### commands auto generated by Alembic - please adjust! ###
+    op.create_table('users',
+    sa.Column('user_id', sa.BigInteger(), sa.Identity(always=False), nullable=False),
+    sa.Column('name', sa.Text(), nullable=False),
+    sa.Column('email', sa.Text(), nullable=False),
+    sa.Column('role', sa.Text(), nullable=False),
+    sa.Column('department', sa.Text(), nullable=True),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.CheckConstraint("role IN ('Sales Representative', 'BDR', 'Sales Manager', 'RevOps')", name='ck_users_role'),
+    sa.PrimaryKeyConstraint('user_id'),
+    sa.UniqueConstraint('email', name='uq_users_email')
+    )
+    op.create_table('leads',
+    sa.Column('lead_id', sa.BigInteger(), sa.Identity(always=False), nullable=False),
+    sa.Column('owner_user_id', sa.BigInteger(), nullable=True),
+    sa.Column('company_name', sa.Text(), nullable=False),
+    sa.Column('industry', sa.Text(), nullable=True),
+    sa.Column('contact_name', sa.Text(), nullable=True),
+    sa.Column('contact_title', sa.Text(), nullable=True),
+    sa.Column('email', sa.Text(), nullable=False),
+    sa.Column('phone', sa.Text(), nullable=True),
+    sa.Column('lead_status', sa.Text(), server_default='New Leads', nullable=False),
+    sa.Column('source', sa.Text(), nullable=False),
+    sa.Column('company_size', sa.Text(), nullable=True),
+    sa.Column('annual_revenue', sa.Text(), nullable=True),
+    sa.Column('funding_stage', sa.Text(), nullable=True),
+    sa.Column('funding_raised', sa.Text(), nullable=True),
+    sa.Column('location', sa.Text(), nullable=True),
+    sa.Column('tech_stack', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.CheckConstraint("lead_status IN ('New Leads', 'Qualified', 'Proposal', 'Negotiation', 'Closed Won')", name='ck_leads_lead_status'),
+    sa.CheckConstraint("source IN ('CRM', 'Website Form', 'LinkedIn', 'Sales Entry', 'CSV')", name='ck_leads_source'),
+    sa.ForeignKeyConstraint(['owner_user_id'], ['users.user_id'], ondelete='SET NULL'),
+    sa.PrimaryKeyConstraint('lead_id')
+    )
+    op.create_table('company_insights',
+    sa.Column('insight_id', sa.BigInteger(), sa.Identity(always=False), nullable=False),
+    sa.Column('lead_id', sa.BigInteger(), nullable=False),
+    sa.Column('business_needs', sa.Text(), nullable=True),
+    sa.Column('opportunities', sa.Text(), nullable=True),
+    sa.Column('industry_analysis', sa.Text(), nullable=True),
+    sa.Column('qualification_score', sa.Integer(), nullable=True),
+    sa.Column('growth_indicators', sa.Text(), nullable=True),
+    sa.Column('tech_alignment', sa.Text(), nullable=True),
+    sa.Column('decision_maker_summary', sa.Text(), nullable=True),
+    sa.Column('generated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.CheckConstraint('qualification_score IS NULL OR qualification_score BETWEEN 0 AND 100', name='ck_company_insights_score'),
+    sa.ForeignKeyConstraint(['lead_id'], ['leads.lead_id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('insight_id')
+    )
+    op.create_table('lead_scores',
+    sa.Column('score_id', sa.BigInteger(), sa.Identity(always=False), nullable=False),
+    sa.Column('lead_id', sa.BigInteger(), nullable=False),
+    sa.Column('lead_score', sa.Integer(), nullable=False),
+    sa.Column('conversion_probability', sa.Numeric(precision=5, scale=2), nullable=False),
+    sa.Column('generated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+    sa.CheckConstraint('conversion_probability BETWEEN 0 AND 100', name='ck_lead_scores_probability'),
+    sa.CheckConstraint('lead_score BETWEEN 0 AND 100', name='ck_lead_scores_score'),
+    sa.ForeignKeyConstraint(['lead_id'], ['leads.lead_id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('score_id')
+    )
+    # ### end Alembic commands ###
+
+
+def downgrade() -> None:
+    """Downgrade schema."""
+    # ### commands auto generated by Alembic - please adjust! ###
+    op.drop_table('lead_scores')
+    op.drop_table('company_insights')
+    op.drop_table('leads')
+    op.drop_table('users')
+    # ### end Alembic commands ###
+</file>
+
+<file path="migrations/env.py">
+import os
+import sys
+from logging.config import fileConfig
+
+from alembic import context
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from backend.database.database import Base, engine as app_engine
+from backend.database import models
+
+config = context.config
+
+if config.config_file_name is not None:
+    fileConfig(config.config_file_name)
+
+target_metadata = Base.metadata
+
+
+def run_migrations_offline() -> None:
+    context.configure(
+        url=str(app_engine.url),
+        target_metadata=target_metadata,
+        literal_binds=True,
+        dialect_opts={"paramstyle": "named"},
+    )
+    with context.begin_transaction():
+        context.run_migrations()
+
+
+def run_migrations_online() -> None:
+    with app_engine.connect() as connection:
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            compare_type=True,
+        )
+        with context.begin_transaction():
+            context.run_migrations()
+
+
+if context.is_offline_mode():
+    run_migrations_offline()
+else:
+    run_migrations_online()
+</file>
+
+<file path="migrations/README">
+Generic single-database configuration.
+</file>
+
+<file path="migrations/script.py.mako">
+"""${message}
+
+Revision ID: ${up_revision}
+Revises: ${down_revision | comma,n}
+Create Date: ${create_date}
+
+"""
+from typing import Sequence, Union
+
+from alembic import op
+import sqlalchemy as sa
+${imports if imports else ""}
+
+# revision identifiers, used by Alembic.
+revision: str = ${repr(up_revision)}
+down_revision: Union[str, Sequence[str], None] = ${repr(down_revision)}
+branch_labels: Union[str, Sequence[str], None] = ${repr(branch_labels)}
+depends_on: Union[str, Sequence[str], None] = ${repr(depends_on)}
+
+
+def upgrade() -> None:
+    """Upgrade schema."""
+    ${upgrades if upgrades else "pass"}
+
+
+def downgrade() -> None:
+    """Downgrade schema."""
+    ${downgrades if downgrades else "pass"}
+</file>
+
+<file path="modules/__init__.py">
+
+</file>
+
+<file path="modules/module1_leads.py">
+
+</file>
+
+<file path="modules/module2_intelligence.py">
+
+</file>
+
+<file path="modules/module3_outreach.py">
+
+</file>
+
+<file path="modules/module4_scoring.py">
+
+</file>
+
+<file path="modules/module5_conversation.py">
+
+</file>
+
+<file path="modules/module6_dashboard.py">
+
+</file>
+
+<file path=".env.example">
+POSTGRES_USER=
+POSTGRES_PASSWORD=
+POSTGRES_DB=
+DATABASE_URL=
+OPENAI_API_KEY=
+</file>
+
+<file path=".gitignore">
+venv/
+.env
+__pycache__/
+*.pyc
+.pytest_cache/
+</file>
+
+<file path="alembic.ini">
+# A generic, single database configuration.
+
+[alembic]
+# path to migration scripts.
+# this is typically a path given in POSIX (e.g. forward slashes)
+# format, relative to the token %(here)s which refers to the location of this
+# ini file
+script_location = %(here)s/migrations
+
+# template used to generate migration file names; The default value is %%(rev)s_%%(slug)s
+# Uncomment the line below if you want the files to be prepended with date and time
+# see https://alembic.sqlalchemy.org/en/latest/tutorial.html#editing-the-ini-file
+# for all available tokens
+# file_template = %%(year)d_%%(month).2d_%%(day).2d_%%(hour).2d%%(minute).2d-%%(rev)s_%%(slug)s
+# Or organize into date-based subdirectories (requires recursive_version_locations = true)
+# file_template = %%(year)d/%%(month).2d/%%(day).2d_%%(hour).2d%%(minute).2d_%%(second).2d_%%(rev)s_%%(slug)s
+
+# sys.path path, will be prepended to sys.path if present.
+# defaults to the current working directory.  for multiple paths, the path separator
+# is defined by "path_separator" below.
+prepend_sys_path = .
+
+
+# timezone to use when rendering the date within the migration file
+# as well as the filename.
+# If specified, requires the tzdata library which can be installed by adding
+# `alembic[tz]` to the pip requirements.
+# string value is passed to ZoneInfo()
+# leave blank for localtime
+# timezone =
+
+# max length of characters to apply to the "slug" field
+# truncate_slug_length = 40
+
+# set to 'true' to run the environment during
+# the 'revision' command, regardless of autogenerate
+# revision_environment = false
+
+# set to 'true' to allow .pyc and .pyo files without
+# a source .py file to be detected as revisions in the
+# versions/ directory
+# sourceless = false
+
+# version location specification; This defaults
+# to <script_location>/versions.  When using multiple version
+# directories, initial revisions must be specified with --version-path.
+# The path separator used here should be the separator specified by "path_separator"
+# below.
+# version_locations = %(here)s/bar:%(here)s/bat:%(here)s/alembic/versions
+
+# path_separator; This indicates what character is used to split lists of file
+# paths, including version_locations and prepend_sys_path within configparser
+# files such as alembic.ini.
+# The default rendered in new alembic.ini files is "os", which uses os.pathsep
+# to provide os-dependent path splitting.
+#
+# Note that in order to support legacy alembic.ini files, this default does NOT
+# take place if path_separator is not present in alembic.ini.  If this
+# option is omitted entirely, fallback logic is as follows:
+#
+# 1. Parsing of the version_locations option falls back to using the legacy
+#    "version_path_separator" key, which if absent then falls back to the legacy
+#    behavior of splitting on spaces and/or commas.
+# 2. Parsing of the prepend_sys_path option falls back to the legacy
+#    behavior of splitting on spaces, commas, or colons.
+#
+# Valid values for path_separator are:
+#
+# path_separator = :
+# path_separator = ;
+# path_separator = space
+# path_separator = newline
+#
+# Use os.pathsep. Default configuration used for new projects.
+path_separator = os
+
+# set to 'true' to search source files recursively
+# in each "version_locations" directory
+# new in Alembic version 1.10
+# recursive_version_locations = false
+
+# the output encoding used when revision files
+# are written from script.py.mako
+# output_encoding = utf-8
+
+# database URL.  This is consumed by the user-maintained env.py script only.
+# other means of configuring database URLs may be customized within the env.py
+# file.
+sqlalchemy.url = driver://user:pass@localhost/dbname
+
+
+[post_write_hooks]
+# post_write_hooks defines scripts or Python functions that are run
+# on newly generated revision scripts.  See the documentation for further
+# detail and examples
+
+# format using "black" - use the console_scripts runner, against the "black" entrypoint
+# hooks = black
+# black.type = console_scripts
+# black.entrypoint = black
+# black.options = -l 79 REVISION_SCRIPT_FILENAME
+
+# lint with attempts to fix using "ruff" - use the module runner, against the "ruff" module
+# hooks = ruff
+# ruff.type = module
+# ruff.module = ruff
+# ruff.options = check --fix REVISION_SCRIPT_FILENAME
+
+# Alternatively, use the exec runner to execute a binary found on your PATH
+# hooks = ruff
+# ruff.type = exec
+# ruff.executable = ruff
+# ruff.options = check --fix REVISION_SCRIPT_FILENAME
+
+# Logging configuration.  This is also consumed by the user-maintained
+# env.py script only.
+[loggers]
+keys = root,sqlalchemy,alembic
+
+[handlers]
+keys = console
+
+[formatters]
+keys = generic
+
+[logger_root]
+level = WARNING
+handlers = console
+qualname =
+
+[logger_sqlalchemy]
+level = WARNING
+handlers =
+qualname = sqlalchemy.engine
+
+[logger_alembic]
+level = INFO
+handlers =
+qualname = alembic
+
+[handler_console]
+class = StreamHandler
+args = (sys.stderr,)
+level = NOTSET
+formatter = generic
+
+[formatter_generic]
+format = %(levelname)-5.5s [%(name)s] %(message)s
+datefmt = %H:%M:%S
+</file>
+
+<file path="app.py">
+
+</file>
+
+<file path="docker-compose.yml">
+# Reads values from .env automatically; falls back to dev defaults if .env is missing.
+services:
+  db:
+    image: postgres:16
+    container_name: salesgenie-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-salesgenie}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-salesgenie_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-salesgenie}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-salesgenie} -d ${POSTGRES_DB:-salesgenie}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Optional DB browser UI: docker compose --profile tools up -d  ->  http://localhost:5050
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: salesgenie-pgadmin
+    profiles: ["tools"]
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@salesgenie.dev
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+</file>
+
+<file path="main.py">
+
+</file>
+
+<file path="README.md">
+# SalesGenie AI Platform
+
+AI Sales Assistant and Lead Intelligence Platform: lead management, company profiling, predictive lead scoring, personalized outreach, conversation intelligence and CRM sync. Specified in [docs/srs/SalesGenie_AI_SRS.pdf](docs/srs/SalesGenie_AI_SRS.pdf) (IEEE Std 830-1998).
+
+## Tech stack
+
+| Layer | Technology |
+|-------|-----------|
+| API | FastAPI + Uvicorn |
+| UI | Streamlit |
+| Database | PostgreSQL 16 (Docker) via SQLAlchemy |
+| AI / agents (later milestones) | LangGraph, Gemini / OpenAI |
+
+## Quick start
+
+Full OS-specific steps (Linux, macOS, Windows) are in **[SETUP.md](SETUP.md)**. The short version:
+
+```
+git clone <repo-url> && cd salesgenie-ai
+python -m venv venv            # python3 on Linux/macOS
+# activate the venv (see SETUP.md for your OS)
+pip install -r requirements-dev.txt
+cp .env.example .env           # Copy-Item on Windows PowerShell
+docker compose up -d
+uvicorn backend.main:app --reload       # terminal 1 -> http://localhost:8000/docs
+streamlit run frontend/app.py           # terminal 2 -> http://localhost:8501
+```
+
+## Repository layout
+
+```
+.
+├── backend/              FastAPI service
+│   ├── main.py           app entry point
+│   ├── database/         models + connection
+│   ├── modules/          one file per SRS module
+│   └── tests/            pytest tests
+├── frontend/             Streamlit app
+├── data/sample/          fake sample datasets (CSV)
+├── docs/
+│   ├── srs/              the SRS
+│   ├── design/           database, wireframes, agent architecture
+│   ├── api/              API contract
+│   ├── testing/          test plan + reports
+│   └── milestones/       per-milestone checklists
+├── docker-compose.yml    PostgreSQL (+ optional pgAdmin)
+├── requirements*.txt     core / dev / AI dependencies
+└── SETUP.md
+```
+
+## Milestones
+
+| # | Weeks | Focus | Checklist |
+|---|-------|-------|-----------|
+| 1 | 1-2 | Lead management and intelligence engine | [docs/milestones/milestone-1.md](docs/milestones/milestone-1.md) |
+| 2 | 3-4 | Outreach generation and lead scoring | |
+| 3 | 5-6 | CRM integration and conversation intelligence | |
+| 4 | 7-8 | Dashboard, automation and deployment | |
+
+## Team workflow
+
+- `main` is always runnable. Never push to it directly.
+- Branch names: `feature/<short-name>`, `fix/<short-name>`, `docs/<short-name>`.
+- Every change goes through a pull request (template included); reference the requirement ID, e.g. `REQ-M1-02`.
+- Change an endpoint or table? Update `docs/api/api-contract.md` or `docs/design/database/` in the same PR.
+- Never commit `.env`. Only `.env.example` is tracked.
+- AI packages are separate: `pip install -r requirements-ai.txt` when the AI milestones start.
+</file>
+
+<file path="requirements-ai.txt">
+# Install only when the AI milestones begin (outreach, agents):
+#   pip install -r requirements-ai.txt
+-r requirements.txt
+openai
+langchain
+langgraph
+</file>
+
+<file path="requirements-dev.txt">
+-r requirements.txt
+pytest
+pytest-cov
+ruff
+pre-commit
+</file>
+
+<file path="run_all.py">
+
+</file>
+
+<file path="docs/design/database/data-dictionary.md">
+# Data Dictionary
+
+Conventions: table and column names are lowercase snake_case; primary keys are `bigint` identity columns named `id`; all timestamps are `timestamptz` (UTC). "Null: no" means the column is required.
+Milestone tags: **M1** built first, **M2**/**M3** later.
+
+## users (M1)
+| Column | Type | Null | Notes |
+|--------|------|------|-------|
+| id | bigint | no | PK |
+| name | text | no | |
+| email | text | no | unique |
+| role | text | no | `rep`, `manager`, `admin` |
+| created_at | timestamptz | no | default now |
+
+## leads (M1)
+One row per prospect (a company plus its main contact).
+
+| Column | Type | Null | Notes |
+|--------|------|------|-------|
+| id | bigint | no | PK |
+| owner_id | bigint | yes | FK users.id, the rep who owns the lead; on user delete set null |
+| company_name | text | no | |
+| industry | text | yes | |
+| contact_name | text | yes | |
+| contact_title | text | yes | used to judge decision-maker level when scoring |
+| email | text | no | unique; the duplicate check on import |
+| phone | text | yes | |
+| company_size | text | yes | e.g. `250-500` |
+| location | text | yes | |
+| funding_stage | text | yes | e.g. `Series C` |
+| tech_stack | jsonb | yes | list of strings, e.g. `["AWS","Python"]` |
+| stage | text | no | pipeline stage, default `new` |
+| source | text | no | how it entered the system, default `csv` |
+| created_at | timestamptz | no | default now |
+| updated_at | timestamptz | no | refreshed on every change |
+
+## lead_scores (M1)
+Every score a lead has ever had. The current score is the newest row.
+
+| Column | Type | Null | Notes |
+|--------|------|------|-------|
+| id | bigint | no | PK |
+| lead_id | bigint | no | FK leads.id, on lead delete cascade |
+| score | int | no | 0 to 100 |
+| priority | text | no | `hot`, `warm`, `cold` |
+| factors | jsonb | yes | breakdown of why, e.g. `{"company_growth": 25, "industry_match": 22}` |
+| reason | text | no | what triggered it: `csv_import`, `manual_rescore`, `call_logged`... |
+| created_at | timestamptz | no | default now |
+
+## company_insights (M1)
+One profile per lead; regenerating overwrites it.
+
+| Column | Type | Null | Notes |
+|--------|------|------|-------|
+| id | bigint | no | PK |
+| lead_id | bigint | no | FK leads.id, **unique** (one per lead), on lead delete cascade |
+| summary | text | yes | short company overview |
+| opportunities | text | yes | where the product could fit |
+| pain_points | text | yes | likely problems the company has |
+| created_at | timestamptz | no | refreshed when regenerated |
+
+## outreach_emails (M2)
+| Column | Type | Null | Notes |
+|--------|------|------|-------|
+| id | bigint | no | PK |
+| lead_id | bigint | no | FK leads.id, on lead delete cascade |
+| user_id | bigint | yes | FK users.id, who generated it; on user delete set null |
+| subject | text | no | |
+| body | text | no | |
+| status | text | no | `draft`, `sent`; default `draft` |
+| created_at | timestamptz | no | default now |
+
+## interactions (M3)
+Calls, meetings and notes with a lead.
+
+| Column | Type | Null | Notes |
+|--------|------|------|-------|
+| id | bigint | no | PK |
+| lead_id | bigint | no | FK leads.id, on lead delete cascade |
+| user_id | bigint | yes | FK users.id, who logged it; on user delete set null |
+| type | text | no | `call`, `meeting`, `email_reply`, `note` |
+| occurred_at | timestamptz | no | when it happened |
+| raw_notes | text | yes | pasted transcript or notes |
+| summary | text | yes | generated summary |
+| action_items | jsonb | yes | list of `{task, owner, due_date}` |
+| created_at | timestamptz | no | default now |
+
+---
+
+## Allowed values (enforce with database checks)
+- **leads.stage**: `new`, `qualified`, `proposal`, `negotiation`, `won`, `lost`
+- **leads.source**: `csv`, `manual`
+- **lead_scores.priority**: `hot`, `warm`, `cold`
+- **lead_scores.score**: 0 to 100 inclusive
+- **users.role**: `rep`, `manager`, `admin`
+- **outreach_emails.status**: `draft`, `sent`
+- **interactions.type**: `call`, `meeting`, `email_reply`, `note`
+
+## Relationships
+| Parent | Child | Cardinality | On parent delete |
+|--------|-------|-------------|------------------|
+| users | leads (owner_id) | 1 : N | set null |
+| users | outreach_emails (user_id) | 1 : N | set null |
+| users | interactions (user_id) | 1 : N | set null |
+| leads | lead_scores | 1 : N | cascade |
+| leads | company_insights | 1 : 1 | cascade |
+| leads | outreach_emails | 1 : N | cascade |
+| leads | interactions | 1 : N | cascade |
+
+## Indexes
+Index every foreign key column (`owner_id`, `lead_id`, `user_id`), plus `leads.stage` and `lead_scores (lead_id, created_at)` so "latest score per lead" is fast. `leads.email` and `users.email` are already indexed by their unique constraints.
+</file>
+
+<file path="docs/design/database/er-diagram.md">
+# ER Diagram
+
+GitHub renders the Mermaid diagram below. A styled export is in `er-diagram.png` / `er-diagram.svg`
+(sources: `er-diagram.mmd`, `er-diagram.dot`; rebuild the image with `dot -Tpng er-diagram.dot -o er-diagram.png`).
+
+![ER diagram](er-diagram.png)
+
+```mermaid
+erDiagram
+    USERS ||--o{ LEADS : owns
+    USERS ||--o{ OUTREACH_EMAILS : writes
+    USERS ||--o{ INTERACTIONS : logs
+    LEADS ||--o{ LEAD_SCORES : "scored over time"
+    LEADS ||--o| COMPANY_INSIGHTS : "profiled by"
+    LEADS ||--o{ OUTREACH_EMAILS : receives
+    LEADS ||--o{ INTERACTIONS : has
+
+    USERS {
+        bigint id PK
+        text name
+        text email UK
+        text role
+        timestamptz created_at
+    }
+    LEADS {
+        bigint id PK
+        bigint owner_id FK
+        text company_name
+        text industry
+        text contact_name
+        text contact_title
+        text email UK
+        text phone
+        text company_size
+        text location
+        text funding_stage
+        jsonb tech_stack
+        text stage
+        text source
+        timestamptz created_at
+        timestamptz updated_at
+    }
+    LEAD_SCORES {
+        bigint id PK
+        bigint lead_id FK
+        int score
+        text priority
+        jsonb factors
+        text reason
+        timestamptz created_at
+    }
+    COMPANY_INSIGHTS {
+        bigint id PK
+        bigint lead_id FK
+        text summary
+        text opportunities
+        text pain_points
+        timestamptz created_at
+    }
+    OUTREACH_EMAILS {
+        bigint id PK
+        bigint lead_id FK
+        bigint user_id FK
+        text subject
+        text body
+        text status
+        timestamptz created_at
+    }
+    INTERACTIONS {
+        bigint id PK
+        bigint lead_id FK
+        bigint user_id FK
+        text type
+        timestamptz occurred_at
+        text raw_notes
+        text summary
+        jsonb action_items
+        timestamptz created_at
+    }
+```
+</file>
+
+<file path="docs/design/database/er-diagram.mmd">
+erDiagram
+    USERS ||--o{ LEADS : owns
+    USERS ||--o{ OUTREACH_EMAILS : writes
+    USERS ||--o{ INTERACTIONS : logs
+    LEADS ||--o{ LEAD_SCORES : "scored over time"
+    LEADS ||--o| COMPANY_INSIGHTS : "profiled by"
+    LEADS ||--o{ OUTREACH_EMAILS : receives
+    LEADS ||--o{ INTERACTIONS : has
+
+    USERS {
+        bigint id PK
+        text name
+        text email UK
+        text role
+        timestamptz created_at
+    }
+    LEADS {
+        bigint id PK
+        bigint owner_id FK
+        text company_name
+        text industry
+        text contact_name
+        text contact_title
+        text email UK
+        text phone
+        text company_size
+        text location
+        text funding_stage
+        jsonb tech_stack
+        text stage
+        text source
+        timestamptz created_at
+        timestamptz updated_at
+    }
+    LEAD_SCORES {
+        bigint id PK
+        bigint lead_id FK
+        int score
+        text priority
+        jsonb factors
+        text reason
+        timestamptz created_at
+    }
+    COMPANY_INSIGHTS {
+        bigint id PK
+        bigint lead_id FK
+        text summary
+        text opportunities
+        text pain_points
+        timestamptz created_at
+    }
+    OUTREACH_EMAILS {
+        bigint id PK
+        bigint lead_id FK
+        bigint user_id FK
+        text subject
+        text body
+        text status
+        timestamptz created_at
+    }
+    INTERACTIONS {
+        bigint id PK
+        bigint lead_id FK
+        bigint user_id FK
+        text type
+        timestamptz occurred_at
+        text raw_notes
+        text summary
+        jsonb action_items
+        timestamptz created_at
+    }
+</file>
+
+<file path="requirements.txt">
+# Core runtime dependencies (Milestone 1)
+fastapi
+uvicorn[standard]
+sqlalchemy
+psycopg2-binary
+psycopg[binary] 
+alembic
+python-dotenv
+pydantic
+python-multipart
+httpx
+requests
+pandas
+streamlit
+</file>
+
+<file path="SETUP.md">
+# Setup Guide
+
+Pick your operating system: [Linux](#linux-ubuntu--debian) | [macOS](#macos) | [Windows](#windows-10--11). Then continue with [Running the project](#running-the-project) and [Troubleshooting](#troubleshooting).
+
+**What you will have at the end:** A Python virtual environment with the project dependencies installed, PostgreSQL running in Docker, and the API and UI ready to run locally.
+
+Docker is used for the database so everyone gets the same PostgreSQL setup without installing or configuring PostgreSQL manually.
+
+---
+
+## Linux (Ubuntu / Debian)
+
+### 1. Install tools
+
+```bash
+sudo apt update
+sudo apt install -y python3 python3-venv python3-pip git curl
+```
+
+Install Docker Engine and the Compose plugin:
+
+```bash
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
+newgrp docker
+```
+
+Check the installations:
+
+```bash
+python3 --version
+git --version
+docker --version
+docker compose version
+```
+
+Python 3.11 or 3.12 is recommended.
+
+### 2. Get the code
+
+```bash
+git clone https://github.com/CodeMaster11000/AI-Powered_Intelligent_Sales_Forecasting_Platform_using_Predictive_Analytics-TEAM-B.git salesgenie-ai
+cd salesgenie-ai
+```
+
+Configure Git if you have not already done so:
+
+```bash
+git config --global user.name "Your Name"
+git config --global user.email "you@example.com"
+```
+
+### 3. Set up Python
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements-dev.txt
+```
+
+### 4. Configure environment variables
+
+```bash
+cp .env.example .env
+```
+
+### 5. Start the database
+
+```bash
+docker compose up -d db
+docker compose ps
+```
+
+Wait until the database is healthy.
+
+Follow the [Database Setup Guide](backend/database/SETUP.md) to initialize the database schema.
+
+Continue to [Running the project](#running-the-project).
+
+---
+
+## macOS
+
+### 1. Install tools
+
+Install [Homebrew](https://brew.sh) if you do not already have it.
+
+```bash
+brew install python@3.12 git
+brew install --cask docker
+```
+
+Open Docker Desktop from Applications and wait until it is running.
+
+Check the installations:
+
+```bash
+python3 --version
+git --version
+docker --version
+docker compose version
+```
+
+### 2. Get the code
+
+```bash
+git clone https://github.com/CodeMaster11000/AI-Powered_Intelligent_Sales_Forecasting_Platform_using_Predictive_Analytics-TEAM-B.git salesgenie-ai
+cd salesgenie-ai
+```
+
+Configure Git if needed:
+
+```bash
+git config --global user.name "Your Name"
+git config --global user.email "you@example.com"
+```
+
+### 3. Set up Python
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements-dev.txt
+```
+
+### 4. Configure environment variables
+
+```bash
+cp .env.example .env
+```
+
+### 5. Start the database
+
+```bash
+docker compose up -d db
+docker compose ps
+```
+
+Wait until the database is healthy.
+
+Follow the [Database Setup Guide](backend/database/SETUP.md) to initialize the database schema.
+
+Continue to [Running the project](#running-the-project).
+
+---
+
+## Windows 10 / 11
+
+Use PowerShell for the commands below.
+
+### 1. Install tools
+
+Install the following:
+
+1. **Python 3.12:** https://www.python.org/downloads/  
+   Enable "Add python.exe to PATH" during installation.
+2. **Git:** https://git-scm.com/download/win
+3. **Docker Desktop:** https://www.docker.com/products/docker-desktop/  
+   Enable WSL 2 if prompted, restart if required, and open Docker Desktop.
+4. **VS Code (optional):** https://code.visualstudio.com/
+
+Close and reopen PowerShell, then check:
+
+```powershell
+python --version
+git --version
+docker --version
+docker compose version
+```
+
+### 2. Get the code
+
+```powershell
+git clone https://github.com/CodeMaster11000/AI-Powered_Intelligent_Sales_Forecasting_Platform_using_Predictive_Analytics-TEAM-B.git salesgenie-ai
+cd salesgenie-ai
+```
+
+Configure Git if needed:
+
+```powershell
+git config --global user.name "Your Name"
+git config --global user.email "you@example.com"
+```
+
+### 3. Set up Python
+
+```powershell
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+```
+
+If PowerShell blocks activation because of the execution policy, run:
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+```
+
+Activate the environment again, then install dependencies:
+
+```powershell
+python -m pip install --upgrade pip
+pip install -r requirements-dev.txt
+```
+
+### 4. Configure environment variables
+
+```powershell
+Copy-Item .env.example .env
+```
+
+### 5. Start the database
+
+```powershell
+docker compose up -d db
+docker compose ps
+```
+
+Wait until the database is healthy.
+
+Follow the [Database Setup Guide](backend/database/SETUP.md) to initialize the database schema.
+
+Continue to [Running the project](#running-the-project).
+
+---
+
+## Running the project
+
+Run all commands from the repository root with the Python virtual environment activated.
+
+Use separate terminals for the API and UI.
+
+### Terminal 1: API
+
+```bash
+uvicorn backend.main:app --reload
+```
+
+API documentation: http://localhost:8000/docs
+
+### Terminal 2: UI
+
+```bash
+streamlit run frontend/app.py
+```
+
+UI: http://localhost:8501
+
+The API and UI commands require their respective application files to be implemented.
+
+### Checking the database
+
+To open a PostgreSQL shell:
+
+```bash
+docker compose exec db psql -U salesgenie -d salesgenie
+```
+
+Inside the shell:
+
+- `\dt` lists tables.
+- `\d leads` describes the `leads` table.
+- `\q` exits PostgreSQL.
+
+For database initialization and schema changes, see the [Database Setup Guide](backend/database/SETUP.md).
+
+### Optional: pgAdmin
+
+If pgAdmin is configured in the Compose file, start it with:
+
+```bash
+docker compose --profile tools up -d pgadmin
+```
+
+Open http://localhost:5050 and sign in using the credentials configured in your Compose setup.
+
+### Every session
+
+1. Open a terminal in the repository root.
+2. Activate the Python virtual environment.
+3. Start the required services:
+
+   ```bash
+   docker compose up -d
+   ```
+
+4. Start the API and UI in separate terminals when they are ready.
+
+You only need to initialize the database schema once, or when new migrations have been added. See the [Database Setup Guide](backend/database/SETUP.md).
+
+### Stopping and resetting
+
+| Goal | Command |
+|---|---|
+| Stop containers and keep database data | `docker compose down` |
+| Stop containers and delete database volumes | `docker compose down -v` |
+| View database logs | `docker compose logs -f db` |
+
+**Warning:** `docker compose down -v` deletes associated volumes and can permanently remove your database data.
+
+### Optional: AI packages
+
+If a later milestone requires AI dependencies:
+
+```bash
+pip install -r requirements-ai.txt
+```
+
+Add your API key to `.env` if required:
+
+```ini
+OPENAI_API_KEY=your-api-key
+```
+
+Never commit `.env` or API keys to Git.
+
+---
+
+## Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| `port is already allocated` | Another process is using the port. Stop the conflicting process or configure a different host port in `.env`. |
+| `docker: permission denied` on Linux | Check Docker group permissions and log out and back in if necessary. |
+| Cannot connect to Docker | Start Docker Desktop on Windows/macOS or start the Docker service on Linux. |
+| Database is unhealthy | Run `docker compose logs db` and check the database configuration. |
+| `python` not found on Windows | Reinstall Python with "Add to PATH" enabled, then reopen PowerShell. |
+| `python` not found on Linux/macOS | Use `python3` outside the virtual environment. |
+| `No module named ...` | Activate the virtual environment and install the project dependencies. |
+| Port 8000 or 8501 is already in use | Stop the other process or configure a different API/UI port. |
+| Database tables are missing | Follow the [Database Setup Guide](backend/database/SETUP.md) and apply pending migrations. |
+
+---
+
+For database-specific instructions, see [`backend/database/SETUP.md`](backend/database/SETUP.md).
+</file>
+
+<file path="docs/design/database/er-diagram.svg">
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 2.43.0 (0)
+ -->
+<!-- Title: ER Pages: 1 -->
+<svg width="959pt" height="737pt"
+ viewBox="0.00 0.00 959.20 737.20" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(21.6 715.6)">
+<title>ER</title>
+<polygon fill="white" stroke="transparent" points="-21.6,21.6 -21.6,-715.6 937.6,-715.6 937.6,21.6 -21.6,21.6"/>
+<!-- users -->
+<g id="node1" class="node">
+<title>users</title>
+<polygon fill="#14284b" stroke="transparent" points="41.5,-336 41.5,-357 197.5,-357 197.5,-336 41.5,-336"/>
+<text text-anchor="start" x="82" y="-343.8" font-family="DejaVu Sans" font-weight="bold" font-size="14.00" fill="white">users</text>
+<text text-anchor="start" x="125" y="-343.8" font-family="DejaVu Sans" font-size="14.00" fill="white"> &#160;</text>
+<text text-anchor="start" x="135" y="-343.8" font-family="DejaVu Sans" font-size="9.00" fill="white">(M1)</text>
+<text text-anchor="start" x="44.5" y="-326.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444">PK</text>
+<text text-anchor="start" x="78.5" y="-325" font-family="DejaVu Sans" font-size="10.00">id</text>
+<text text-anchor="start" x="136.5" y="-325.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">bigint</text>
+<text text-anchor="start" x="44.5" y="-309.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444"> </text>
+<text text-anchor="start" x="78.5" y="-308" font-family="DejaVu Sans" font-size="10.00">name</text>
+<text text-anchor="start" x="136.5" y="-308.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">text</text>
+<text text-anchor="start" x="44.5" y="-292.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444">UK</text>
+<text text-anchor="start" x="78.5" y="-291" font-family="DejaVu Sans" font-size="10.00">email</text>
+<text text-anchor="start" x="136.5" y="-291.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">text</text>
+<text text-anchor="start" x="44.5" y="-275.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444"> </text>
+<text text-anchor="start" x="78.5" y="-274" font-family="DejaVu Sans" font-size="10.00">role</text>
+<text text-anchor="start" x="136.5" y="-274.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">text</text>
+<text text-anchor="start" x="44.5" y="-258.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444"> </text>
+<text text-anchor="start" x="78.5" y="-257" font-family="DejaVu Sans" font-size="10.00">created_at</text>
+<text text-anchor="start" x="136.5" y="-257.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">timestamptz</text>
+<polygon fill="none" stroke="#14284b" points="40.5,-250 40.5,-358 198.5,-358 198.5,-250 40.5,-250"/>
+</g>
+<!-- leads -->
+<g id="node2" class="node">
+<title>leads</title>
+<polygon fill="#14284b" stroke="transparent" points="368.5,-429 368.5,-450 551.5,-450 551.5,-429 368.5,-429"/>
+<text text-anchor="start" x="422.5" y="-436.8" font-family="DejaVu Sans" font-weight="bold" font-size="14.00" fill="white">leads</text>
+<text text-anchor="start" x="465.5" y="-436.8" font-family="DejaVu Sans" font-size="14.00" fill="white"> &#160;</text>
+<text text-anchor="start" x="475.5" y="-436.8" font-family="DejaVu Sans" font-size="9.00" fill="white">(M1)</text>
+<text text-anchor="start" x="371.5" y="-419.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444">PK</text>
+<text text-anchor="start" x="405.5" y="-418" font-family="DejaVu Sans" font-size="10.00">id</text>
+<text text-anchor="start" x="490.5" y="-418.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">bigint</text>
+<text text-anchor="start" x="371.5" y="-402.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444">FK</text>
+<text text-anchor="start" x="405.5" y="-401" font-family="DejaVu Sans" font-size="10.00">owner_id</text>
+<text text-anchor="start" x="490.5" y="-401.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">bigint, null</text>
+<text text-anchor="start" x="371.5" y="-385.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444"> </text>
+<text text-anchor="start" x="405.5" y="-384" font-family="DejaVu Sans" font-size="10.00">company_name</text>
+<text text-anchor="start" x="490.5" y="-384.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">text</text>
+<text text-anchor="start" x="371.5" y="-368.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444"> </text>
+<text text-anchor="start" x="405.5" y="-367" font-family="DejaVu Sans" font-size="10.00">industry</text>
+<text text-anchor="start" x="490.5" y="-367.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">text</text>
+<text text-anchor="start" x="371.5" y="-351.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444"> </text>
+<text text-anchor="start" x="405.5" y="-350" font-family="DejaVu Sans" font-size="10.00">contact_name</text>
+<text text-anchor="start" x="490.5" y="-350.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">text</text>
+<text text-anchor="start" x="371.5" y="-334.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444"> </text>
+<text text-anchor="start" x="405.5" y="-333" font-family="DejaVu Sans" font-size="10.00">contact_title</text>
+<text text-anchor="start" x="490.5" y="-333.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">text</text>
+<text text-anchor="start" x="371.5" y="-317.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444">UK</text>
+<text text-anchor="start" x="405.5" y="-316" font-family="DejaVu Sans" font-size="10.00">email</text>
+<text text-anchor="start" x="490.5" y="-316.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">text</text>
+<text text-anchor="start" x="371.5" y="-300.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444"> </text>
+<text text-anchor="start" x="405.5" y="-299" font-family="DejaVu Sans" font-size="10.00">phone</text>
+<text text-anchor="start" x="490.5" y="-299.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">text</text>
+<text text-anchor="start" x="371.5" y="-283.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444"> </text>
+<text text-anchor="start" x="405.5" y="-282" font-family="DejaVu Sans" font-size="10.00">company_size</text>
+<text text-anchor="start" x="490.5" y="-282.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">text</text>
+<text text-anchor="start" x="371.5" y="-266.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444"> </text>
+<text text-anchor="start" x="405.5" y="-265" font-family="DejaVu Sans" font-size="10.00">location</text>
+<text text-anchor="start" x="490.5" y="-265.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">text</text>
+<text text-anchor="start" x="371.5" y="-249.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444"> </text>
+<text text-anchor="start" x="405.5" y="-248" font-family="DejaVu Sans" font-size="10.00">funding_stage</text>
+<text text-anchor="start" x="490.5" y="-248.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">text</text>
+<text text-anchor="start" x="371.5" y="-232.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444"> </text>
+<text text-anchor="start" x="405.5" y="-231" font-family="DejaVu Sans" font-size="10.00">tech_stack</text>
+<text text-anchor="start" x="490.5" y="-231.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">jsonb (list)</text>
+<text text-anchor="start" x="371.5" y="-215.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444"> </text>
+<text text-anchor="start" x="405.5" y="-214" font-family="DejaVu Sans" font-size="10.00">stage</text>
+<text text-anchor="start" x="490.5" y="-214.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">text</text>
+<text text-anchor="start" x="371.5" y="-198.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444"> </text>
+<text text-anchor="start" x="405.5" y="-197" font-family="DejaVu Sans" font-size="10.00">source</text>
+<text text-anchor="start" x="490.5" y="-197.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">text</text>
+<text text-anchor="start" x="371.5" y="-181.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444"> </text>
+<text text-anchor="start" x="405.5" y="-180" font-family="DejaVu Sans" font-size="10.00">created_at</text>
+<text text-anchor="start" x="490.5" y="-180.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">timestamptz</text>
+<text text-anchor="start" x="371.5" y="-164.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444"> </text>
+<text text-anchor="start" x="405.5" y="-163" font-family="DejaVu Sans" font-size="10.00">updated_at</text>
+<text text-anchor="start" x="490.5" y="-163.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">timestamptz</text>
+<polygon fill="none" stroke="#14284b" points="367,-156.5 367,-451.5 552,-451.5 552,-156.5 367,-156.5"/>
+</g>
+<!-- users&#45;&gt;leads -->
+<g id="edge1" class="edge">
+<title>users&#45;&gt;leads</title>
+<path fill="none" stroke="#555555" d="M203.64,-304C250.18,-304 308.56,-304 357.69,-304"/>
+<polygon fill="#555555" stroke="#555555" points="199.79,-308.5 199.79,-299.5 201.59,-299.5 201.59,-308.5 199.79,-308.5"/>
+<polyline fill="none" stroke="#555555" points="198.89,-304 203.39,-304 "/>
+<polygon fill="#555555" stroke="#555555" points="357.75,-304 366.75,-308.05 362.25,-304 366.75,-304 366.75,-304 366.75,-304 362.25,-304 366.75,-299.95 357.75,-304 357.75,-304"/>
+<text text-anchor="middle" x="303" y="-307" font-family="DejaVu Sans" font-size="10.00">owns</text>
+<text text-anchor="middle" x="346.81" y="-311.1" font-family="DejaVu Sans" font-size="9.00">N</text>
+<text text-anchor="middle" x="218.83" y="-292.5" font-family="DejaVu Sans" font-size="9.00">1</text>
+</g>
+<!-- oe -->
+<g id="node5" class="node">
+<title>oe</title>
+<polygon fill="#2f5da8" stroke="transparent" points="743.5,-672 743.5,-693 910.5,-693 910.5,-672 743.5,-672"/>
+<text text-anchor="start" x="746.5" y="-679.8" font-family="DejaVu Sans" font-weight="bold" font-size="14.00" fill="white">outreach_emails</text>
+<text text-anchor="start" x="875.5" y="-679.8" font-family="DejaVu Sans" font-size="14.00" fill="white"> &#160;</text>
+<text text-anchor="start" x="885.5" y="-679.8" font-family="DejaVu Sans" font-size="9.00" fill="white">(M2)</text>
+<text text-anchor="start" x="746.5" y="-662.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444">PK</text>
+<text text-anchor="start" x="785.5" y="-661" font-family="DejaVu Sans" font-size="10.00">id</text>
+<text text-anchor="start" x="846.5" y="-661.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">bigint</text>
+<text text-anchor="start" x="746.5" y="-645.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444">FK</text>
+<text text-anchor="start" x="785.5" y="-644" font-family="DejaVu Sans" font-size="10.00">lead_id</text>
+<text text-anchor="start" x="846.5" y="-644.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">bigint</text>
+<text text-anchor="start" x="746.5" y="-628.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444">FK</text>
+<text text-anchor="start" x="785.5" y="-627" font-family="DejaVu Sans" font-size="10.00">user_id</text>
+<text text-anchor="start" x="846.5" y="-627.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">bigint</text>
+<text text-anchor="start" x="746.5" y="-611.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444"> </text>
+<text text-anchor="start" x="785.5" y="-610" font-family="DejaVu Sans" font-size="10.00">subject</text>
+<text text-anchor="start" x="846.5" y="-610.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">text</text>
+<text text-anchor="start" x="746.5" y="-594.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444"> </text>
+<text text-anchor="start" x="785.5" y="-593" font-family="DejaVu Sans" font-size="10.00">body</text>
+<text text-anchor="start" x="846.5" y="-593.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">text</text>
+<text text-anchor="start" x="746.5" y="-577.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444"> </text>
+<text text-anchor="start" x="785.5" y="-576" font-family="DejaVu Sans" font-size="10.00">status</text>
+<text text-anchor="start" x="846.5" y="-576.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">text</text>
+<text text-anchor="start" x="746.5" y="-560.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444"> </text>
+<text text-anchor="start" x="785.5" y="-559" font-family="DejaVu Sans" font-size="10.00">created_at</text>
+<text text-anchor="start" x="846.5" y="-559.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">timestamptz</text>
+<polygon fill="none" stroke="#2f5da8" points="742,-552 742,-694 911,-694 911,-552 742,-552"/>
+</g>
+<!-- users&#45;&gt;oe -->
+<g id="edge2" class="edge">
+<title>users&#45;&gt;oe</title>
+<path fill="none" stroke="#555555" d="M202.93,-353.66C215.12,-361.33 227.46,-369.27 239,-377 297.42,-416.14 304.47,-437.83 367,-470 487.3,-531.9 637.92,-576.51 732.96,-601.06"/>
+<polygon fill="#555555" stroke="#555555" points="197.17,-355.36 201.96,-347.74 203.48,-348.69 198.7,-356.32 197.17,-355.36"/>
+<polyline fill="none" stroke="#555555" points="198.8,-351.07 202.62,-353.46 "/>
+<polygon fill="#555555" stroke="#555555" points="732.97,-601.07 740.69,-607.23 737.33,-602.19 741.69,-603.31 741.69,-603.31 741.69,-603.31 737.33,-602.19 742.7,-599.38 732.97,-601.07 732.97,-601.07"/>
+<text text-anchor="middle" x="459.5" y="-549" font-family="DejaVu Sans" font-size="10.00">writes</text>
+<text text-anchor="middle" x="720.07" y="-605.16" font-family="DejaVu Sans" font-size="9.00">N</text>
+<text text-anchor="middle" x="220.63" y="-351.59" font-family="DejaVu Sans" font-size="9.00">1</text>
+</g>
+<!-- it -->
+<g id="node6" class="node">
+<title>it</title>
+<polygon fill="#1f7a7a" stroke="transparent" points="742.5,-154 742.5,-175 910.5,-175 910.5,-154 742.5,-154"/>
+<text text-anchor="start" x="763" y="-161.8" font-family="DejaVu Sans" font-weight="bold" font-size="14.00" fill="white">interactions</text>
+<text text-anchor="start" x="858" y="-161.8" font-family="DejaVu Sans" font-size="14.00" fill="white"> &#160;</text>
+<text text-anchor="start" x="868" y="-161.8" font-family="DejaVu Sans" font-size="9.00" fill="white">(M3)</text>
+<text text-anchor="start" x="745.5" y="-144.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444">PK</text>
+<text text-anchor="start" x="779.5" y="-143" font-family="DejaVu Sans" font-size="10.00">id</text>
+<text text-anchor="start" x="849.5" y="-143.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">bigint</text>
+<text text-anchor="start" x="745.5" y="-127.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444">FK</text>
+<text text-anchor="start" x="779.5" y="-126" font-family="DejaVu Sans" font-size="10.00">lead_id</text>
+<text text-anchor="start" x="849.5" y="-126.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">bigint</text>
+<text text-anchor="start" x="745.5" y="-110.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444">FK</text>
+<text text-anchor="start" x="779.5" y="-109" font-family="DejaVu Sans" font-size="10.00">user_id</text>
+<text text-anchor="start" x="849.5" y="-109.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">bigint</text>
+<text text-anchor="start" x="745.5" y="-93.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444"> </text>
+<text text-anchor="start" x="779.5" y="-92" font-family="DejaVu Sans" font-size="10.00">type</text>
+<text text-anchor="start" x="849.5" y="-92.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">text</text>
+<text text-anchor="start" x="745.5" y="-76.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444"> </text>
+<text text-anchor="start" x="779.5" y="-75" font-family="DejaVu Sans" font-size="10.00">occurred_at</text>
+<text text-anchor="start" x="849.5" y="-75.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">timestamptz</text>
+<text text-anchor="start" x="745.5" y="-59.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444"> </text>
+<text text-anchor="start" x="779.5" y="-58" font-family="DejaVu Sans" font-size="10.00">raw_notes</text>
+<text text-anchor="start" x="849.5" y="-58.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">text</text>
+<text text-anchor="start" x="745.5" y="-42.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444"> </text>
+<text text-anchor="start" x="779.5" y="-41" font-family="DejaVu Sans" font-size="10.00">summary</text>
+<text text-anchor="start" x="849.5" y="-41.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">text</text>
+<text text-anchor="start" x="745.5" y="-25.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444"> </text>
+<text text-anchor="start" x="779.5" y="-24" font-family="DejaVu Sans" font-size="10.00">action_items</text>
+<text text-anchor="start" x="849.5" y="-24.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">jsonb</text>
+<text text-anchor="start" x="745.5" y="-8.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444"> </text>
+<text text-anchor="start" x="779.5" y="-7" font-family="DejaVu Sans" font-size="10.00">created_at</text>
+<text text-anchor="start" x="849.5" y="-7.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">timestamptz</text>
+<polygon fill="none" stroke="#1f7a7a" points="741.5,0 741.5,-176 911.5,-176 911.5,0 741.5,0"/>
+</g>
+<!-- users&#45;&gt;it -->
+<g id="edge3" class="edge">
+<title>users&#45;&gt;it</title>
+<path fill="none" stroke="#555555" d="M180.61,-246.47C227.44,-205.47 296.19,-153.15 367,-127 487.51,-82.49 637.55,-78.51 732.46,-81.7"/>
+<polygon fill="#555555" stroke="#555555" points="180.65,-252.44 174.7,-245.68 176.05,-244.49 182,-251.25 180.65,-252.44"/>
+<polyline fill="none" stroke="#555555" points="177,-249.65 180.38,-246.68 "/>
+<polygon fill="#555555" stroke="#555555" points="732.47,-81.71 741.32,-86.08 736.97,-81.87 741.47,-82.04 741.47,-82.04 741.47,-82.04 736.97,-81.87 741.61,-77.99 732.47,-81.71 732.47,-81.71"/>
+<text text-anchor="middle" x="459.5" y="-130" font-family="DejaVu Sans" font-size="10.00">logs</text>
+<text text-anchor="middle" x="721.2" y="-88.4" font-family="DejaVu Sans" font-size="9.00">N</text>
+<text text-anchor="middle" x="185.82" y="-227.3" font-family="DejaVu Sans" font-size="9.00">1</text>
+</g>
+<!-- ls -->
+<g id="node3" class="node">
+<title>ls</title>
+<polygon fill="#14284b" stroke="transparent" points="748.5,-332 748.5,-353 904.5,-353 904.5,-332 748.5,-332"/>
+<text text-anchor="start" x="764.5" y="-339.8" font-family="DejaVu Sans" font-weight="bold" font-size="14.00" fill="white">lead_scores</text>
+<text text-anchor="start" x="856.5" y="-339.8" font-family="DejaVu Sans" font-size="14.00" fill="white"> &#160;</text>
+<text text-anchor="start" x="866.5" y="-339.8" font-family="DejaVu Sans" font-size="9.00" fill="white">(M1)</text>
+<text text-anchor="start" x="751.5" y="-322.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444">PK</text>
+<text text-anchor="start" x="785.5" y="-321" font-family="DejaVu Sans" font-size="10.00">id</text>
+<text text-anchor="start" x="843.5" y="-321.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">bigint</text>
+<text text-anchor="start" x="751.5" y="-305.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444">FK</text>
+<text text-anchor="start" x="785.5" y="-304" font-family="DejaVu Sans" font-size="10.00">lead_id</text>
+<text text-anchor="start" x="843.5" y="-304.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">bigint</text>
+<text text-anchor="start" x="751.5" y="-288.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444"> </text>
+<text text-anchor="start" x="785.5" y="-287" font-family="DejaVu Sans" font-size="10.00">score</text>
+<text text-anchor="start" x="843.5" y="-287.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">int 0&#45;100</text>
+<text text-anchor="start" x="751.5" y="-271.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444"> </text>
+<text text-anchor="start" x="785.5" y="-270" font-family="DejaVu Sans" font-size="10.00">priority</text>
+<text text-anchor="start" x="843.5" y="-270.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">text</text>
+<text text-anchor="start" x="751.5" y="-254.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444"> </text>
+<text text-anchor="start" x="785.5" y="-253" font-family="DejaVu Sans" font-size="10.00">factors</text>
+<text text-anchor="start" x="843.5" y="-253.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">jsonb</text>
+<text text-anchor="start" x="751.5" y="-237.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444"> </text>
+<text text-anchor="start" x="785.5" y="-236" font-family="DejaVu Sans" font-size="10.00">reason</text>
+<text text-anchor="start" x="843.5" y="-236.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">text</text>
+<text text-anchor="start" x="751.5" y="-220.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444"> </text>
+<text text-anchor="start" x="785.5" y="-219" font-family="DejaVu Sans" font-size="10.00">created_at</text>
+<text text-anchor="start" x="843.5" y="-219.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">timestamptz</text>
+<polygon fill="none" stroke="#14284b" points="747.5,-212 747.5,-354 905.5,-354 905.5,-212 747.5,-212"/>
+</g>
+<!-- leads&#45;&gt;ls -->
+<g id="edge4" class="edge">
+<title>leads&#45;&gt;ls</title>
+<path fill="none" stroke="#555555" d="M556.75,-298.46C613.01,-295.23 683.46,-291.17 738.11,-288.03"/>
+<polygon fill="#555555" stroke="#555555" points="553.29,-303.17 552.77,-294.18 554.57,-294.08 555.09,-303.07 553.29,-303.17"/>
+<polyline fill="none" stroke="#555555" points="552.13,-298.73 556.63,-298.47 "/>
+<polygon fill="#555555" stroke="#555555" points="738.45,-288.01 747.67,-291.53 742.94,-287.75 747.43,-287.49 747.43,-287.49 747.43,-287.49 742.94,-287.75 747.2,-283.45 738.45,-288.01 738.45,-288.01"/>
+<text text-anchor="middle" x="644.5" y="-298" font-family="DejaVu Sans" font-size="10.00">scored over time</text>
+<text text-anchor="middle" x="728.06" y="-295.72" font-family="DejaVu Sans" font-size="9.00">N</text>
+<text text-anchor="middle" x="571.51" y="-286.1" font-family="DejaVu Sans" font-size="9.00">1</text>
+</g>
+<!-- ci -->
+<g id="node4" class="node">
+<title>ci</title>
+<polygon fill="#14284b" stroke="transparent" points="738.5,-493 738.5,-514 915.5,-514 915.5,-493 738.5,-493"/>
+<text text-anchor="start" x="741.5" y="-500.8" font-family="DejaVu Sans" font-weight="bold" font-size="14.00" fill="white">company_insights</text>
+<text text-anchor="start" x="880.5" y="-500.8" font-family="DejaVu Sans" font-size="14.00" fill="white"> &#160;</text>
+<text text-anchor="start" x="890.5" y="-500.8" font-family="DejaVu Sans" font-size="9.00" fill="white">(M1)</text>
+<text text-anchor="start" x="741.5" y="-483.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444">PK</text>
+<text text-anchor="start" x="782.5" y="-482" font-family="DejaVu Sans" font-size="10.00">id</text>
+<text text-anchor="start" x="853.5" y="-482.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">bigint</text>
+<text text-anchor="start" x="741.5" y="-466.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444">FK, UK</text>
+<text text-anchor="start" x="782.5" y="-465" font-family="DejaVu Sans" font-size="10.00">lead_id</text>
+<text text-anchor="start" x="853.5" y="-465.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">bigint</text>
+<text text-anchor="start" x="741.5" y="-449.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444"> </text>
+<text text-anchor="start" x="782.5" y="-448" font-family="DejaVu Sans" font-size="10.00">summary</text>
+<text text-anchor="start" x="853.5" y="-448.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">text</text>
+<text text-anchor="start" x="741.5" y="-432.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444"> </text>
+<text text-anchor="start" x="782.5" y="-431" font-family="DejaVu Sans" font-size="10.00">opportunities</text>
+<text text-anchor="start" x="853.5" y="-431.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">text</text>
+<text text-anchor="start" x="741.5" y="-415.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444"> </text>
+<text text-anchor="start" x="782.5" y="-414" font-family="DejaVu Sans" font-size="10.00">pain_points</text>
+<text text-anchor="start" x="853.5" y="-414.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">text</text>
+<text text-anchor="start" x="741.5" y="-398.3" font-family="DejaVu Sans" font-weight="bold" font-size="9.00" fill="#444444"> </text>
+<text text-anchor="start" x="782.5" y="-397" font-family="DejaVu Sans" font-size="10.00">created_at</text>
+<text text-anchor="start" x="853.5" y="-397.3" font-family="DejaVu Sans" font-size="9.00" fill="#777777">timestamptz</text>
+<polygon fill="none" stroke="#14284b" points="737,-390.5 737,-515.5 916,-515.5 916,-390.5 737,-390.5"/>
+</g>
+<!-- leads&#45;&gt;ci -->
+<g id="edge5" class="edge">
+<title>leads&#45;&gt;ci</title>
+<path fill="none" stroke="#555555" d="M556.47,-343.18C610.97,-365.42 678.85,-393.13 732.79,-415.16"/>
+<polygon fill="#555555" stroke="#555555" points="551.27,-345.91 554.67,-337.58 556.33,-338.26 552.93,-346.59 551.27,-345.91"/>
+<polyline fill="none" stroke="#555555" points="552.13,-341.41 556.3,-343.11 "/>
+<polygon fill="#555555" stroke="#555555" points="737.85,-412.36 734.45,-420.69 732.78,-420.01 736.18,-411.68 737.85,-412.36"/>
+<polyline fill="none" stroke="#555555" points="736.98,-416.86 732.81,-415.16 "/>
+<text text-anchor="middle" x="644.5" y="-394" font-family="DejaVu Sans" font-size="10.00">profiled by</text>
+<text text-anchor="middle" x="715.01" y="-415.74" font-family="DejaVu Sans" font-size="9.00">1</text>
+<text text-anchor="middle" x="574.11" y="-338.13" font-family="DejaVu Sans" font-size="9.00">1</text>
+</g>
+<!-- leads&#45;&gt;oe -->
+<g id="edge6" class="edge">
+<title>leads&#45;&gt;oe</title>
+<path fill="none" stroke="#555555" d="M555.61,-387.12C611.72,-436.16 682.25,-497.81 737.14,-545.78"/>
+<polygon fill="#555555" stroke="#555555" points="549.85,-388.07 555.77,-381.29 557.13,-382.47 551.21,-389.25 549.85,-388.07"/>
+<polyline fill="none" stroke="#555555" points="552.13,-384.09 555.52,-387.05 "/>
+<polygon fill="#555555" stroke="#555555" points="737.32,-545.93 741.43,-554.91 740.71,-548.9 744.1,-551.86 744.1,-551.86 744.1,-551.86 740.71,-548.9 746.76,-548.81 737.32,-545.93 737.32,-545.93"/>
+<text text-anchor="middle" x="644.5" y="-495" font-family="DejaVu Sans" font-size="10.00">receives</text>
+<text text-anchor="middle" x="722.97" y="-543.54" font-family="DejaVu Sans" font-size="9.00">N</text>
+<text text-anchor="middle" x="573.27" y="-388.01" font-family="DejaVu Sans" font-size="9.00">1</text>
+</g>
+<!-- leads&#45;&gt;it -->
+<g id="edge7" class="edge">
+<title>leads&#45;&gt;it</title>
+<path fill="none" stroke="#555555" d="M556.24,-247.34C611,-214.94 679.33,-174.5 733.46,-142.47"/>
+<polygon fill="#555555" stroke="#555555" points="555.2,-253.19 550.62,-245.44 552.17,-244.53 556.75,-252.27 555.2,-253.19"/>
+<polyline fill="none" stroke="#555555" points="552.13,-249.77 556.01,-247.48 "/>
+<polygon fill="#555555" stroke="#555555" points="733.59,-142.39 743.4,-141.29 737.46,-140.1 741.33,-137.81 741.33,-137.81 741.33,-137.81 737.46,-140.1 739.27,-134.32 733.59,-142.39 733.59,-142.39"/>
+<text text-anchor="middle" x="644.5" y="-218" font-family="DejaVu Sans" font-size="10.00">has</text>
+<text text-anchor="middle" x="728.91" y="-153.76" font-family="DejaVu Sans" font-size="9.00">N</text>
+<text text-anchor="middle" x="564.56" y="-229.42" font-family="DejaVu Sans" font-size="9.00">1</text>
+</g>
+<!-- legend -->
+<g id="node7" class="node">
+<title>legend</title>
+<text text-anchor="start" x="4.5" y="-434" font-family="DejaVu Sans" font-weight="bold" font-size="10.00">Legend</text>
+<text text-anchor="start" x="4.5" y="-416.8" font-family="DejaVu Sans" font-size="9.00">(M1 / M2 / M3) = milestone where the table is built</text>
+<text text-anchor="start" x="4.5" y="-400.8" font-family="DejaVu Sans" font-size="9.00">PK primary key, FK foreign key, UK unique</text>
+</g>
+</g>
+</svg>
+</file>
+
+<file path="docs/design/database/README.md">
+# Database Design
+
+PostgreSQL 16 (runs in Docker, see the root `SETUP.md`). This folder is the source of truth for the schema: the code that creates the tables must match it, and any schema change updates these files in the same pull request.
+
+| File | What it is |
+|------|-----------|
+| [er-diagram.md](er-diagram.md) | ER diagram (Mermaid, renders on GitHub) |
+| `er-diagram.png` / `.svg` | Styled export for slides and reports |
+| `er-diagram.mmd` / `.dot` | Editable diagram sources |
+| [data-dictionary.md](data-dictionary.md) | Every table and column: type, nullable, meaning, allowed values, delete rules, indexes |
+
+## The model in one paragraph
+
+A sales rep (**users**) owns prospects (**leads**). Each lead gets scored over time (**lead_scores**) and profiled once (**company_insights**). The rep generates cold emails for a lead (**outreach_emails**) and logs calls and meetings with it (**interactions**). Everything hangs off `leads`.
+
+| Table | Milestone | Purpose |
+|-------|-----------|---------|
+| users | M1 | the people using the app |
+| leads | M1 | prospects: company, contact, profile data, pipeline stage |
+| lead_scores | M1 | every score a lead has had; newest row is the current score |
+| company_insights | M1 | AI or rule-based profile of the company |
+| outreach_emails | M2 | generated cold emails |
+| interactions | M3 | call/meeting notes, summaries, action items |
+
+Create only the tables of the milestone you are working on.
+
+## Design decisions
+
+- **One score concept.** A lead's score is the newest row in `lead_scores`. Importing a CSV adds the first row; logging a call or new information adds another with a different `reason`. The history shows how the lead moved, and nothing needs a second kind of score.
+- **`priority` is stored** (hot / warm / cold) so lists can filter without recomputing from the number.
+- **`factors` stores why** a score is what it is. It makes scores explainable in the UI and in demos.
+- **One row per lead, not separate company and contact tables.** Proper CRMs split them, but that doubles the import and UI logic. Revisit if one company ever needs many contacts.
+- **`company_insights` is one row per lead** and is overwritten on regeneration; history isn't valuable there.
+- **`tech_stack` and `action_items` are `jsonb` lists** instead of extra tables; promote them to tables only if you need to query or complete items individually.
+- **Dashboard numbers** (conversion rate, pipeline value, averages) are computed with queries over these tables, not stored, so they never go stale.
+- **`lost` is a real stage.** A pipeline needs a way to close out dead leads.
+- **Duplicates:** `leads.email` is unique and is the duplicate check during import.
+
+## Conventions
+
+- Lowercase plural snake_case table names, snake_case columns. (`user` is a reserved word in Postgres, which is another reason the table is `users`.)
+- PKs: bigint identity named `id`. Timestamps: `timestamptz`, stored in UTC.
+- Foreign keys are real constraints. Restricted-value columns use database checks, so bad data can't enter from any code path.
+- Deleting a lead deletes everything attached to it.
+
+## Change process
+
+1. Edit `data-dictionary.md` and the diagram source (`er-diagram.md` / `.mmd` / `.dot`); re-export the PNG/SVG if the diagram changed.
+2. Put the schema change and the doc change in the **same PR**, and have the backend developer review it.
+3. Once the schema is more than a day or two old, use migrations (Alembic is already in `requirements.txt`) so teammates update their local DB by running a command instead of wiping data.
+</file>
+
+</files>

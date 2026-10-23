@@ -1,6 +1,5 @@
 from datetime import datetime
-from decimal import Decimal
-from typing import Literal, Any, Optional, List
+from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
@@ -12,19 +11,19 @@ SourceType = Literal["CRM", "Website Form", "LinkedIn", "Sales Entry", "CSV"]
 class LeadBase(BaseModel):
     company_name: str = Field(..., min_length=1, max_length=255)
     email: EmailStr
-    contact_name: Optional[str] = None
-    contact_title: Optional[str] = None
-    industry: Optional[str] = None
-    phone: Optional[str] = None
+    contact_name: str | None = None
+    contact_title: str | None = None
+    industry: str | None = None
+    phone: str | None = None
     lead_status: LeadStatusType = "New Leads"
     source: SourceType = "CSV"
-    company_size: Optional[str] = None
-    annual_revenue: Optional[str] = None
-    funding_stage: Optional[str] = None
-    funding_raised: Optional[str] = None
-    location: Optional[str] = None
-    tech_stack: Optional[List[str]] = None
-    owner_user_id: Optional[int] = None
+    company_size: str | None = None
+    annual_revenue: str | None = None
+    funding_stage: str | None = None
+    funding_raised: str | None = None
+    location: str | None = None
+    tech_stack: list[str] | None = None
+    owner_user_id: int | None = None
 
 
 class LeadCreate(LeadBase):
@@ -40,7 +39,7 @@ class LeadResponse(LeadBase):
 
 
 class BulkLeadImportRequest(BaseModel):
-    leads: List[LeadCreate]
+    leads: list[LeadCreate]
     skip_duplicates: bool = True
 
 
@@ -48,7 +47,7 @@ class BulkLeadImportResponse(BaseModel):
     total_received: int
     imported_count: int
     skipped_duplicates: int
-    errors: List[str] = []
+    errors: list[str] = []
 
 
 class PipelineStatsResponse(BaseModel):
@@ -67,7 +66,6 @@ class UserResponse(BaseModel):
     role: str
 
 
-# =====================================================================
 # Module 2: AI Lead Intelligence Schemas (REQ-M2-01, M2-02, M2-03)
 # =====================================================================
 
