@@ -2,12 +2,30 @@ import io
 import pandas as pd
 import streamlit as st
 
-from frontend.utils.api_client import bulk_import_api, fetch_users
-from frontend.utils.csv_parser import (
-    TARGET_SCHEMA_FIELDS,
-    auto_match_column,
-    generate_sample_csv,
-)
+try:
+    from frontend.utils.api_client import bulk_import_api, fetch_users
+    from frontend.utils.csv_parser import (
+        TARGET_SCHEMA_FIELDS,
+        auto_match_column,
+        generate_sample_csv,
+    )
+except ModuleNotFoundError:
+    from utils.api_client import bulk_import_api, fetch_users
+    from utils.csv_parser import (
+        TARGET_SCHEMA_FIELDS,
+        auto_match_column,
+        generate_sample_csv,
+    )
+
+
+def clean_cell(raw_value) -> str | None:
+    """Sanitizes raw pandas values, converting NaNs, empty strings, and nulls to None."""
+    if pd.isna(raw_value):
+        return None
+    val_str = str(raw_value).strip()
+    if val_str.lower() in ("", "nan", "none", "null", "n/a"):
+        return None
+    return val_str
 
 
 def render_csv_uploader():
@@ -17,7 +35,7 @@ def render_csv_uploader():
         st.session_state["demo_active"] = False
 
     with st.container(border=True):
-        # Action toolbar
+        # Action Toolbar
         t_col1, t_col2, t_col3 = st.columns([2.5, 1.2, 1.3])
 
         with t_col1:
@@ -102,8 +120,9 @@ def render_csv_uploader():
         for idx, col_name in enumerate(df.columns):
             c1, c2, c3, c4 = st.columns([2.2, 3, 3, 1.2])
 
-            sample_val = str(df[col_name].iloc[0]) if not df.empty else "N/A"
-            sample_display = (sample_val[:28] + "...") if len(sample_val) > 28 else sample_val
+            first_raw = df[col_name].iloc[0] if not df.empty else "N/A"
+            cleaned_sample = clean_cell(first_raw) or "—"
+            sample_display = (cleaned_sample[:28] + "...") if len(cleaned_sample) > 28 else cleaned_sample
 
             guessed_key = auto_match_column(col_name)
             default_index = 0
@@ -138,12 +157,13 @@ def render_csv_uploader():
 
         st.divider()
 
+        # Inverted Target Lookup: target_field -> csv_column
+        target_to_col = {target: col for col, target in column_mapping.items()}
+        has_company = "company_name" in target_to_col
+        has_email = "email" in target_to_col
+
         # Pre-import verification checks
         st.markdown("<h5 style='font-size: 14px; font-weight: 600; margin-bottom: 6px;'>Pre-Import Validation</h5>", unsafe_allow_html=True)
-
-        mapped_targets = list(column_mapping.values())
-        has_company = "company_name" in mapped_targets
-        has_email = "email" in mapped_targets
 
         val_col1, val_col2 = st.columns([2.5, 1.5])
 
@@ -158,7 +178,6 @@ def render_csv_uploader():
                     missing.append("Work Email")
                 st.error(f"Missing mandatory mapping: {', '.join(missing)}.")
 
-            # Assignment fixed: skip_dupes defined here
             skip_dupes = st.checkbox(
                 "Skip existing duplicates based on email check (Recommended)",
                 value=True,
@@ -191,49 +210,77 @@ def render_csv_uploader():
                 disabled=not ready,
             ):
                 leads_to_post = []
+                skipped_empty_rows = 0
+
                 for _, r in df.iterrows():
+                    company_raw = r.get(target_to_col["company_name"]) if has_company else None
+                    email_raw = r.get(target_to_col["email"]) if has_email else None
+
+                    comp_clean = clean_cell(company_raw) or "Unknown Company"
+                    mail_clean = clean_cell(email_raw)
+
+                    # Guard against blank emails in specific rows
+                    if not mail_clean:
+                        skipped_empty_rows += 1
+                        continue
+
                     lead_dict = {
-                        "company_name": str(r.get([c for c, m in column_mapping.items() if m == "company_name"][0], "Unknown")).strip(),
-                        "email": str(r.get([c for c, m in column_mapping.items() if m == "email"][0], "")).strip().lower(),
+                        "company_name": comp_clean,
+                        "email": mail_clean.lower(),
                         "source": "CSV",
                         "lead_status": "New Leads",
                         "owner_user_id": selected_owner_id,
                     }
-                    if "contact_name" in mapped_targets:
-                        val = str(r.get([c for c, m in column_mapping.items() if m == "contact_name"][0], "")).strip()
-                        lead_dict["contact_name"] = val if val and val != "nan" else None
-                    if "contact_title" in mapped_targets:
-                        val = str(r.get([c for c, m in column_mapping.items() if m == "contact_title"][0], "")).strip()
-                        lead_dict["contact_title"] = val if val and val != "nan" else None
-                    if "industry" in mapped_targets:
-                        val = str(r.get([c for c, m in column_mapping.items() if m == "industry"][0], "")).strip()
-                        lead_dict["industry"] = val if val and val != "nan" else None
-                    if "company_size" in mapped_targets:
-                        val = str(r.get([c for c, m in column_mapping.items() if m == "company_size"][0], "")).strip()
-                        lead_dict["company_size"] = val if val and val != "nan" else None
-                    if "funding_stage" in mapped_targets:
-                        val = str(r.get([c for c, m in column_mapping.items() if m == "funding_stage"][0], "")).strip()
-                        lead_dict["funding_stage"] = val if val and val != "nan" else None
-                    if "location" in mapped_targets:
-                        val = str(r.get([c for c, m in column_mapping.items() if m == "location"][0], "")).strip()
-                        lead_dict["location"] = val if val and val != "nan" else None
-                    if "tech_stack" in mapped_targets:
-                        raw_stack = str(r.get([c for c, m in column_mapping.items() if m == "tech_stack"][0], "")).strip()
-                        if raw_stack and raw_stack != "nan":
+
+                    # Safely map all secondary and financial firmographics
+                    if "contact_name" in target_to_col:
+                        lead_dict["contact_name"] = clean_cell(r.get(target_to_col["contact_name"]))
+                    if "contact_title" in target_to_col:
+                        lead_dict["contact_title"] = clean_cell(r.get(target_to_col["contact_title"]))
+                    if "phone" in target_to_col:
+                        lead_dict["phone"] = clean_cell(r.get(target_to_col["phone"]))
+                    if "industry" in target_to_col:
+                        lead_dict["industry"] = clean_cell(r.get(target_to_col["industry"]))
+                    if "company_size" in target_to_col:
+                        lead_dict["company_size"] = clean_cell(r.get(target_to_col["company_size"]))
+                    if "annual_revenue" in target_to_col:
+                        lead_dict["annual_revenue"] = clean_cell(r.get(target_to_col["annual_revenue"]))
+                    if "funding_stage" in target_to_col:
+                        lead_dict["funding_stage"] = clean_cell(r.get(target_to_col["funding_stage"]))
+                    if "funding_raised" in target_to_col:
+                        lead_dict["funding_raised"] = clean_cell(r.get(target_to_col["funding_raised"]))
+                    if "location" in target_to_col:
+                        lead_dict["location"] = clean_cell(r.get(target_to_col["location"]))
+
+                    if "tech_stack" in target_to_col:
+                        raw_stack = clean_cell(r.get(target_to_col["tech_stack"]))
+                        if raw_stack:
                             lead_dict["tech_stack"] = [t.strip() for t in raw_stack.split(",") if t.strip()]
                         else:
                             lead_dict["tech_stack"] = None
 
                     leads_to_post.append(lead_dict)
 
+                if not leads_to_post:
+                    st.error("No valid prospect rows with non-empty emails were found.")
+                    return
+
                 success, result = bulk_import_api(leads_to_post, skip_duplicates=skip_dupes)
 
                 if success:
-                    imported = result.get("imported_count", 0)
-                    skipped = result.get("skipped_duplicates", 0)
+                    imported = result.get("imported_count", 0) if isinstance(result, dict) else len(leads_to_post)
+                    skipped = result.get("skipped_duplicates", 0) if isinstance(result, dict) else 0
                     st.session_state["session_additions"] += imported
                     st.session_state["demo_active"] = False
                     st.toast(f"Committed {imported} leads to PostgreSQL! ({skipped} duplicates skipped)", icon="✅")
                     st.rerun()
                 else:
-                    st.error(f"Import failed: {result}")
+                    # Dev fallback if backend is offline
+                    if "Backend is offline" in str(result):
+                        st.session_state.setdefault("recent_ingested_leads", []).extend(leads_to_post)
+                        st.session_state["session_additions"] += len(leads_to_post)
+                        st.session_state["demo_active"] = False
+                        st.warning(f"Backend offline: Staged {len(leads_to_post)} leads in local session memory.")
+                        st.rerun()
+                    else:
+                        st.error(f"Import failed: {result}")
