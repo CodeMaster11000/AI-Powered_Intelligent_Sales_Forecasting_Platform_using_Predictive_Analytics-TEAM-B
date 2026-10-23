@@ -20,6 +20,7 @@ from frontend.components.csv_uploader import render_csv_uploader
 from frontend.components.header import render_header
 from frontend.components.manual_form import render_manual_form
 from frontend.components.staging_feed import render_staging_feed
+from frontend.components.intelligence_view import render_intelligence_view
 from frontend.styles.themes import apply_theme
 
 # 3. Apply Active Theme
@@ -33,13 +34,20 @@ render_header(
 )
 
 # 5. Work Area Tabs
-tab_bulk, tab_manual = st.tabs(["📁 Bulk CSV Import", "✏️ Manual Single Entry"])
+tab_bulk, tab_manual, tab_ai = st.tabs([
+    "📁 Bulk CSV Import",
+    "✏️ Manual Single Entry",
+    "🧠 AI Lead Intelligence Engine",
+])
 
 with tab_bulk:
     render_csv_uploader()
 
 with tab_manual:
     render_manual_form()
+
+with tab_ai:
+    render_intelligence_view()
 
 # 6. Session Feed
 render_staging_feed()
