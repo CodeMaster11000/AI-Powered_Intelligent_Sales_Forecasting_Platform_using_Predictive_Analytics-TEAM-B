@@ -7,6 +7,7 @@ try:
         generate_outreach_api,
         save_outreach_draft_api,
         send_outreach_email_api,
+        fetch_llm_providers_api,
     )
 except ModuleNotFoundError:
     from utils.api_client import (
@@ -15,64 +16,49 @@ except ModuleNotFoundError:
         generate_outreach_api,
         save_outreach_draft_api,
         send_outreach_email_api,
+        fetch_llm_providers_api,
+    )
+
+from modules.module3_outreach import generate_personalized_email
+
+
+def synthesize_offline_draft(
+    company: str,
+    contact: str,
+    title: str,
+    tech_stack: list,
+    angle: str,
+    tone: str,
+    custom_notes: str = "",
+    funding_stage: str = "Growth",
+    industry: str = "Technology",
+) -> dict:
+    """Local resilient synthesizer powered by the AI Outreach Agent heuristic engine."""
+    mock_lead = {
+        "company_name": company,
+        "contact_name": contact,
+        "contact_title": title,
+        "tech_stack": tech_stack,
+        "funding_stage": funding_stage,
+        "industry": industry,
+    }
+    return generate_personalized_email(
+        lead=mock_lead,
+        insight_data={},
+        angle=angle,
+        tone=tone,
+        custom_note=custom_notes,
     )
 
 
-def synthesize_offline_draft(company: str, contact: str, title: str, tech_stack: list, angle: str, tone: str) -> dict:
-    """Local fallback generator to ensure outreach drafts render even if backend is offline."""
-    first_name = (contact or "there").split()[0]
-    stack_name = tech_stack[0] if tech_stack else "cloud"
-
-    if "Direct & Punchy" in tone:
-        body = (
-            f"Hi {first_name},\n\n"
-            f"Noticed {company}'s growth and work scaling your {stack_name} architecture.\n\n"
-            f"Most {title}s we speak with lose 4-6 hours weekly on manual pipeline scoring as deals expand.\n\n"
-            f"SalesGenie automates predictive lead qualification with 92% pipeline forecast accuracy. "
-            f"Open to a brief 5-minute chat this Thursday?\n\n"
-            f"Best,\nAlex Rep"
-        )
-    elif "Problem-Centric" in tone:
-        body = (
-            f"Hi {first_name},\n\n"
-            f"Quick observation on {company}: as teams scale data throughput, forecast variance often bottlenecks revenue reporting.\n\n"
-            f"Our platform benchmarks show a 40% reduction in lead qualification cycles for teams using {stack_name}.\n\n"
-            f"Would you be open to a 10-minute look at the benchmark data this Wednesday?\n\n"
-            f"Regards,\nAlex Rep"
-        )
-    else:  # Consultative
-        body = (
-            f"Hi {first_name},\n\n"
-            f"Congratulations on {company}'s ongoing market momentum.\n\n"
-            f"In reviewing your tech footprint, our models flagged high alignment between your {stack_name} stack and our predictive analytics platform.\n\n"
-            f"We help high-growth sales teams match high-intent prospects before they hit the open market.\n\n"
-            f"Do you have 10 minutes this Thursday afternoon to share notes?\n\n"
-            f"Best regards,\nAlex Rep\nSalesGenie AI"
-        )
-
-    subjects = [
-        f"Quick question re: {stack_name} at {company}",
-        f"{company} + SalesGenie: predictive intelligence",
-        f"Idea for {first_name} on sales forecasting",
-    ]
-
-    return {
-        "subject_options": subjects,
-        "selected_subject": subjects[0],
-        "body": body,
-        "hook_score": 92,
-        "word_count": len(body.split()),
-    }
-
-
 def render_outreach_studio():
-    """Renders the AI Cold Outreach Generation Studio (Wireframe B)."""
+    """Renders the AI Cold Outreach Generation Studio with Multi-LLM Orchestration."""
     
     st.markdown(
         """
         <div style="margin-bottom: 16px;">
-            <h3 class="sg-title" style="font-size: 20px;">Personalized AI Outreach Studio</h3>
-            <p class="sg-subtitle">Synthesize prospect intelligence, tech stack, and pain points into high-converting emails.</p>
+            <h3 class="sg-title" style="font-size: 20px;">✉️ Multi-LLM AI Personalized Outreach Studio</h3>
+            <p class="sg-subtitle">Synthesize prospect intelligence, tech stack, and pain points into high-converting cold emails.</p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -127,27 +113,48 @@ def render_outreach_studio():
             "contact_title": "VP of Engineering",
             "email": "sarah@acmecloud.io",
             "funding_stage": "Series B",
+            "industry": "Enterprise Software",
             "tech_stack": ["AWS", "PostgreSQL", "Kubernetes"],
         }
 
-    # 4. Two-Column Studio: Left Strategy (1.5) | Right Draft Editor (2.5)
+    # Fetch available LLM Providers for multi-model versatility
+    llm_info = fetch_llm_providers_api()
+    
+    # 4. Two-Column Studio: Left Strategy (1.6) | Right Draft Editor (2.4)
     s_col1, s_col2 = st.columns([1.6, 2.4])
 
     # Track draft version per prospect to prevent state collision
     if "draft_version" not in st.session_state:
         st.session_state["draft_version"] = 0
 
-    # --- LEFT PANE: STRATEGY CONTROLS ---
+    # --- LEFT PANE: STRATEGY & LLM CONTROLS ---
     with s_col1:
         with st.container(border=True):
-            st.markdown("<h4 style='margin:0 0 8px 0; font-size: 15px; font-weight: 600;'>Outreach Strategy & Angle</h4>", unsafe_allow_html=True)
+            st.markdown("<h4 style='margin:0 0 8px 0; font-size: 15px; font-weight: 600;'>Outreach Strategy & Engine</h4>", unsafe_allow_html=True)
             
+            # Multi-LLM Provider Selector
+            provider_choices = {
+                "🤖 Auto-Cascade (Gemini ➔ OpenAI ➔ Grok ➔ Ollama)": "auto",
+                "✨ Google Gemini (Primary Enterprise)": "gemini",
+                "⚡ OpenAI (GPT-4o-mini)": "openai",
+                "🚀 xAI Grok (grok-2-latest)": "grok",
+                "🦙 Local Ollama (llama3 Private)": "ollama",
+            }
+            selected_provider_label = st.selectbox(
+                "AI Model Provider",
+                options=list(provider_choices.keys()),
+                index=0,
+                help="SalesGenie supports multi-LLM versatility: Google Gemini, OpenAI, xAI Grok, and offline Local Ollama.",
+            )
+            preferred_provider_key = provider_choices[selected_provider_label]
+
             angle = st.selectbox(
                 "Value Angle / Hook",
                 options=[
                     "Cloud Scale & Infrastructure Efficiency",
                     "Pipeline Variance & Forecasting ROI",
                     "Tech Stack Modernization",
+                    "Operational Cost Reduction & Security",
                 ],
             )
 
@@ -160,7 +167,7 @@ def render_outreach_studio():
                 ],
             )
 
-            # Detected Context Chips
+            # Detected Context Signals
             st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
             st.caption("DETECTED CONTEXT SIGNALS")
             
@@ -175,19 +182,33 @@ def render_outreach_studio():
                 unsafe_allow_html=True,
             )
 
-            custom_notes = st.text_area("Custom Rep Notes (Optional)", placeholder="e.g. Mention our recent benchmark with similar SaaS teams...", height=70)
+            custom_notes = st.text_area(
+                "Custom Rep Notes (Optional)",
+                placeholder="e.g. Mention our recent benchmark with similar SaaS teams...",
+                height=70,
+            )
 
             if st.button("🔄 Generate / Refresh Draft", type="primary", use_container_width=True):
-                new_draft = generate_outreach_api(target_id, angle, tone, custom_notes)
-                if not new_draft:
-                    new_draft = synthesize_offline_draft(
-                        dossier["company_name"],
-                        dossier["contact_name"],
-                        dossier.get("contact_title", "Executive"),
-                        stack_list,
+                with st.spinner("AI Agent synthesizing personalized outreach..."):
+                    new_draft = generate_outreach_api(
+                        target_id,
                         angle,
                         tone,
+                        custom_notes,
+                        preferred_provider=preferred_provider_key,
                     )
+                    if not new_draft:
+                        new_draft = synthesize_offline_draft(
+                            dossier["company_name"],
+                            dossier["contact_name"],
+                            dossier.get("contact_title", "Executive"),
+                            stack_list,
+                            angle,
+                            tone,
+                            custom_notes=custom_notes,
+                            funding_stage=dossier.get("funding_stage", "Growth"),
+                            industry=dossier.get("industry", "Technology"),
+                        )
                 st.session_state["current_draft"] = new_draft
                 st.session_state["draft_lead_id"] = target_id
                 st.session_state["draft_version"] += 1
@@ -197,7 +218,13 @@ def render_outreach_studio():
     with s_col2:
         # Load draft from API or offline synthesizer
         if "current_draft" not in st.session_state or st.session_state.get("draft_lead_id") != target_id:
-            live_draft = generate_outreach_api(target_id, angle, tone, custom_notes)
+            live_draft = generate_outreach_api(
+                target_id,
+                angle,
+                tone,
+                custom_notes,
+                preferred_provider=preferred_provider_key,
+            )
             if not live_draft:
                 live_draft = synthesize_offline_draft(
                     dossier["company_name"],
@@ -206,17 +233,31 @@ def render_outreach_studio():
                     stack_list,
                     angle,
                     tone,
+                    custom_notes=custom_notes,
+                    funding_stage=dossier.get("funding_stage", "Growth"),
+                    industry=dossier.get("industry", "Technology"),
                 )
             st.session_state["current_draft"] = live_draft
             st.session_state["draft_lead_id"] = target_id
 
         draft = st.session_state.get("current_draft", {})
         subject_options = draft.get("subject_options", [f"Introduction: {dossier['company_name']}"])
+        provider_used = draft.get("provider_used", "SalesGenie AI Multi-LLM Engine")
 
         with st.container(border=True):
-            st.markdown("<h4 style='margin:0 0 8px 0; font-size: 15px; font-weight: 600;'>Generated Cold Email</h4>", unsafe_allow_html=True)
+            st.markdown(
+                f"""
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <h4 style="margin:0; font-size: 15px; font-weight: 600;">Personalized Cold Email</h4>
+                    <span style="font-size: 11px; padding: 2px 8px; border-radius: 12px; background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3);">
+                        ✨ {provider_used}
+                    </span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
-            subject_choice = st.selectbox("Subject Line Variant", options=subject_options, index=0)
+            subject_choice = st.selectbox("Subject Line Variant (A/B Test Options)", options=subject_options, index=0)
 
             # Editable Email Body with version-stable key
             v_key = f"draft_body_{target_id}_{st.session_state.get('draft_version', 0)}"
@@ -225,12 +266,22 @@ def render_outreach_studio():
 
             edited_body = st.text_area("Email Body", value=st.session_state[v_key], height=240, key=f"widget_{v_key}")
 
+            # Personalization Triggers Pills
+            triggers = draft.get("personalization_triggers", [])
+            if triggers:
+                trigger_pills = " ".join([f"<span style='background: rgba(16, 185, 129, 0.12); color: #34d399; padding: 2px 6px; border-radius: 4px; font-size: 11px; margin-right: 4px;'>🎯 {t}</span>" for t in triggers])
+                st.markdown(f"<div style='margin-bottom: 8px;'>{trigger_pills}</div>", unsafe_allow_html=True)
+
+            reading_time = draft.get("reading_time_seconds", max(10, round(len(edited_body.split()) / 3.5)))
+            hook_score = draft.get("hook_score", 92)
+
             st.markdown(
                 f"""
-                <div style="display: flex; justify-content: space-between; font-size: 12px; opacity: 0.7; margin: 8px 0 16px 0;">
-                    <span>Hook Score: <strong>{draft.get('hook_score', 90)} / 100</strong></span>
-                    <span>Estimated Word Count: <strong>{len(edited_body.split())} words</strong></span>
-                    <span>Status: <strong>Ready to Send</strong></span>
+                <div style="display: flex; justify-content: space-between; font-size: 12px; opacity: 0.8; margin: 8px 0 16px 0;">
+                    <span>Hook Score: <strong style="color: {'#34d399' if hook_score >= 90 else '#60a5fa'};">{hook_score} / 100</strong></span>
+                    <span>Word Count: <strong>{len(edited_body.split())} words</strong></span>
+                    <span>Reading Time: <strong>~{reading_time}s</strong></span>
+                    <span>CTA: <strong>{draft.get('call_to_action', '5-min review')}</strong></span>
                 </div>
                 """,
                 unsafe_allow_html=True,

@@ -1,3 +1,9 @@
+import sys
+import os
+
+# Add repository root to python path to ensure robust cross-directory execution
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 import streamlit as st
 
 # 1. Page Configuration (Must be first Streamlit command)
@@ -26,6 +32,7 @@ try:
     from frontend.components.outreach_studio import render_outreach_studio
     from frontend.components.scoring_hub import render_scoring_hub
     from frontend.components.staging_feed import render_staging_feed
+    from frontend.components.intelligence_view import render_intelligence_view
     from frontend.styles.themes import apply_theme
 except ModuleNotFoundError:
     from components.csv_uploader import render_csv_uploader
@@ -34,6 +41,7 @@ except ModuleNotFoundError:
     from components.outreach_studio import render_outreach_studio
     from components.scoring_hub import render_scoring_hub
     from components.staging_feed import render_staging_feed
+    from components.intelligence_view import render_intelligence_view
     from styles.themes import apply_theme
 
 # 4. Apply Active Theme
@@ -43,7 +51,12 @@ apply_theme()
 render_header(session_additions=st.session_state["session_additions"])
 
 # 6. Core Workflow Navigation Tabs (ONLY ONE st.radio HERE)
-tabs = ["📊 Leads & Ingestion", "⚡ Predictive Scoring", "✉️ Cold Outreach"]
+tabs = [
+    "📊 Leads & Ingestion",
+    "🧠 AI Lead Intelligence",
+    "⚡ Predictive Scoring",
+    "✉️ Cold Outreach",
+]
 
 # Consume any pending programmatic navigation BEFORE the widget is created
 if "pending_nav_tab" in st.session_state:
@@ -64,12 +77,21 @@ st.markdown("<div style='margin-top: 8px;'></div>", unsafe_allow_html=True)
 
 # 7. View Routing
 if active_tab == "📊 Leads & Ingestion":
-    tab_bulk, tab_manual = st.tabs(["📁 Bulk CSV Import", "✏️ Manual Single Entry"])
+    tab_bulk, tab_manual, tab_intel = st.tabs([
+        "📁 Bulk CSV Import",
+        "✏️ Manual Single Entry",
+        "🧠 Quick Intelligence Profiling",
+    ])
     with tab_bulk:
         render_csv_uploader()
     with tab_manual:
         render_manual_form()
+    with tab_intel:
+        render_intelligence_view()
     render_staging_feed()
+
+elif active_tab == "🧠 AI Lead Intelligence":
+    render_intelligence_view()
 
 elif active_tab == "⚡ Predictive Scoring":
     render_scoring_hub()

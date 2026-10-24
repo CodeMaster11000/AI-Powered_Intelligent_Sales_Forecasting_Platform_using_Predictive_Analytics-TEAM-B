@@ -251,6 +251,20 @@ class OutreachRequest(BaseModel):
     angle: str = "Cloud Scale & Efficiency"
     tone: str = "Consultative / Executive"
     custom_note: str = ""
+    preferred_provider: str | None = None
+
+
+class SaveDraftRequest(BaseModel):
+    lead_id: int
+    subject: str
+    body: str
+    status: str = "draft"
+
+
+class SendOutreachRequest(BaseModel):
+    lead_id: int
+    subject: str
+    body: str
 
 
 @app.post("/api/outreach/generate", tags=["Outreach"])
@@ -259,8 +273,20 @@ def generate_outreach(req: OutreachRequest, db: Session = Depends(get_db)):
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
 
-    insight = db.execute(select(CompanyInsight).where(CompanyInsight.lead_id == req.lead_id)).scalars().first()
-    insight_dict = {"opportunities": insight.opportunities} if insight else {}
+    insight = db.execute(
+        select(CompanyInsight).where(CompanyInsight.lead_id == req.lead_id).order_by(CompanyInsight.generated_at.desc())
+    ).scalars().first()
+
+    insight_dict = {}
+    if insight:
+        insight_dict = {
+            "business_needs": insight.business_needs,
+            "opportunities": insight.opportunities,
+            "industry_analysis": insight.industry_analysis,
+            "growth_indicators": insight.growth_indicators,
+            "tech_alignment": insight.tech_alignment,
+            "decision_maker_summary": insight.decision_maker_summary,
+        }
 
     return generate_personalized_email(
         lead=lead,
@@ -268,4 +294,46 @@ def generate_outreach(req: OutreachRequest, db: Session = Depends(get_db)):
         angle=req.angle,
         tone=req.tone,
         custom_note=req.custom_note,
+        preferred_provider=req.preferred_provider,
     )
+
+
+@app.post("/api/outreach/save-draft", tags=["Outreach"])
+def save_outreach_draft(req: SaveDraftRequest, db: Session = Depends(get_db)):
+    lead = db.get(Lead, req.lead_id)
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    return {
+        "status": "saved",
+        "lead_id": req.lead_id,
+        "company_name": lead.company_name,
+        "subject": req.subject,
+    }
+
+
+@app.post("/api/outreach/send", tags=["Outreach"])
+def send_outreach_email(req: SendOutreachRequest, db: Session = Depends(get_db)):
+    lead = db.get(Lead, req.lead_id)
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+
+    # Transition pipeline stage upon sending outreach
+    if lead.lead_status in ("New Leads", "Qualified"):
+        lead.lead_status = "Proposal"
+        db.commit()
+
+    return {
+        "status": "sent",
+        "lead_id": req.lead_id,
+        "recipient": lead.email,
+        "company_name": lead.company_name,
+        "subject": req.subject,
+        "lead_status": lead.lead_status,
+    }
+
+
+# --- MULTI-LLM PROVIDER CONFIGURATION ---
+@app.get("/api/llm/providers", tags=["AI Engine"])
+def get_llm_providers():
+    from backend.ai_agents.llm_client import llm_client
+    return llm_client.get_available_providers()
