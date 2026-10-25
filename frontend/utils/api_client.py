@@ -128,16 +128,46 @@ def batch_score_api() -> int:
     return 0
 
 
-def generate_outreach_api(lead_id: int, angle: str, tone: str, custom_note: str = "") -> dict | None:
-    """Generates targeted email subject variants and body drafts."""
+def generate_outreach_api(
+    lead_id: int,
+    angle: str,
+    tone: str,
+    custom_note: str = "",
+    preferred_provider: str | None = None,
+) -> dict | None:
+    """Generates targeted email subject variants and body drafts via AI Outreach Agent."""
     try:
-        payload = {"lead_id": lead_id, "angle": angle, "tone": tone, "custom_note": custom_note}
-        res = requests.post(f"{API_BASE_URL}/api/outreach/generate", json=payload, timeout=6.0)
+        payload = {
+            "lead_id": lead_id,
+            "angle": angle,
+            "tone": tone,
+            "custom_note": custom_note,
+            "preferred_provider": preferred_provider,
+        }
+        res = requests.post(f"{API_BASE_URL}/api/outreach/generate", json=payload, timeout=25.0)
         if res.status_code == 200:
             return res.json()
     except requests.RequestException:
         pass
     return None
+
+
+def fetch_llm_providers_api() -> dict:
+    """Fetches real-time status of configured LLM providers (Gemini, OpenAI, Grok, Ollama)."""
+    try:
+        res = requests.get(f"{API_BASE_URL}/api/llm/providers", timeout=2.0)
+        if res.status_code == 200:
+            return res.json()
+    except requests.RequestException:
+        pass
+    return {
+        "gemini": {"available": False, "model": "gemini-1.5-pro"},
+        "openai": {"available": False, "model": "gpt-4o-mini"},
+        "grok": {"available": False, "model": "grok-2-latest"},
+        "ollama": {"available": False, "model": "llama3"},
+        "preferred_provider": "auto",
+        "last_used_provider": None,
+    }
 
 
 def save_outreach_draft_api(lead_id: int, subject: str, body: str) -> tuple[bool, str]:
