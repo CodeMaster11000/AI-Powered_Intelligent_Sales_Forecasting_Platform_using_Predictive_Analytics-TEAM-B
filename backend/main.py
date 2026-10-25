@@ -1,4 +1,3 @@
-from decimal import Decimal
 from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -30,7 +29,6 @@ from modules.module1_leads import (
     seed_default_users,
 )
 from modules.module2_intelligence import (
-    generate_company_insights,
     analyze_lead_intelligence,
     analyze_and_store_lead_intelligence,
     get_lead_insights,
@@ -38,7 +36,6 @@ from modules.module2_intelligence import (
     get_architecture_diagram,
 )
 from modules.module3_outreach import generate_personalized_email
-from modules.module4_scoring import calculate_lead_score, score_lead
 
 app = FastAPI(title="SalesGenie AI Core API", version="1.0.0")
 
@@ -99,10 +96,12 @@ def get_all_leads(
 def analyze_lead(lead_id: int, db: Session = Depends(get_db)):
     try:
         return analyze_and_store_lead_intelligence(db, lead_id)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Analysis failed: {e}")
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception:
+        raise HTTPException(status_code=503, detail="AI analysis is currently unavailable.")
 
 
 @app.get("/api/leads/{lead_id}/insights", response_model=CompanyInsightResponse, tags=["Lead Intelligence"])
@@ -122,8 +121,10 @@ def batch_analyze(req: BatchAnalysisRequest, db: Session = Depends(get_db)):
 def analyze_raw_prospect(prospect: ProspectAnalysisRequest):
     try:
         return analyze_lead_intelligence(prospect.model_dump())
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception:
+        raise HTTPException(status_code=503, detail="AI analysis is currently unavailable.")
 
 
 @app.get("/api/intelligence/architecture", tags=["Lead Intelligence"])
@@ -176,7 +177,7 @@ def get_scoring_queue(db: Session = Depends(get_db)):
 
 @app.get("/api/leads/{lead_id}/dossier", tags=["Scoring"])
 def get_lead_dossier(lead_id: int, db: Session = Depends(get_db)):
-    """Fetches complete AI dossier with factor breakdown and company intelligence."""
+    """Fetches the latest LangGraph analysis and persisted intelligence for a lead."""
     lead = db.get(Lead, lead_id)
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
@@ -187,29 +188,35 @@ def get_lead_dossier(lead_id: int, db: Session = Depends(get_db)):
         .order_by(LeadScore.generated_at.desc())
     ).scalars().first()
 
-    score_data = calculate_lead_score(lead)
-    if score_obj:
-        score_data["score"] = score_obj.lead_score
-        score_data["conversion_probability"] = float(score_obj.conversion_probability)
-        score_data["priority"] = "hot" if score_obj.lead_score >= 75 else ("warm" if score_obj.lead_score >= 40 else "cold")
-
     insight_obj = db.execute(
         select(CompanyInsight)
         .where(CompanyInsight.lead_id == lead_id)
         .order_by(CompanyInsight.generated_at.desc())
     ).scalars().first()
 
-    if not insight_obj:
-        insight_res = generate_company_insights(db, lead_id)
-    else:
-        insight_res = {
-            "business_needs": insight_obj.business_needs,
-            "opportunities": insight_obj.opportunities,
-            "industry_analysis": insight_obj.industry_analysis,
-            "growth_indicators": insight_obj.growth_indicators,
-            "tech_alignment": insight_obj.tech_alignment,
-            "decision_maker_summary": insight_obj.decision_maker_summary,
-        }
+    if not score_obj or not insight_obj:
+        try:
+            analyze_and_store_lead_intelligence(db, lead_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except Exception:
+            raise HTTPException(status_code=503, detail="AI analysis is currently unavailable.")
+        score_obj = db.execute(
+            select(LeadScore)
+            .where(LeadScore.lead_id == lead_id)
+            .order_by(LeadScore.generated_at.desc())
+        ).scalars().first()
+
+    insight_res = get_lead_insights(db, lead_id)
+    if not score_obj or not insight_res:
+        raise HTTPException(status_code=503, detail="AI analysis did not produce a complete dossier.")
+
+    score_value = score_obj.lead_score
+    score_data = {
+        "score": score_value,
+        "conversion_probability": float(score_obj.conversion_probability),
+        "priority": "hot" if score_value >= 75 else ("warm" if score_value >= 40 else "cold"),
+    }
 
     return {
         "lead_id": lead.lead_id,
@@ -227,9 +234,25 @@ def get_lead_dossier(lead_id: int, db: Session = Depends(get_db)):
 
 @app.post("/api/leads/{lead_id}/score", tags=["Scoring"])
 def rescore_lead(lead_id: int, db: Session = Depends(get_db)):
-    score_res = score_lead(db, lead_id)
-    insight_res = generate_company_insights(db, lead_id)
-    return {"scoring": score_res, "insights": insight_res}
+    try:
+        analysis = analyze_and_store_lead_intelligence(db, lead_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception:
+        raise HTTPException(status_code=503, detail="AI analysis is currently unavailable.")
+
+    return {
+        "scoring": {
+            "score": analysis["qualification_score"],
+            "conversion_probability": analysis["conversion_probability"],
+            "priority": (
+                "hot" if analysis["qualification_score"] >= 75
+                else "warm" if analysis["qualification_score"] >= 40
+                else "cold"
+            ),
+        },
+        "insights": analysis,
+    }
 
 
 @app.post("/api/leads/score-batch", tags=["Scoring"])
@@ -239,8 +262,7 @@ def score_batch(db: Session = Depends(get_db)):
     for lead in leads:
         existing = db.execute(select(LeadScore).where(LeadScore.lead_id == lead.lead_id)).first()
         if not existing:
-            score_lead(db, lead.lead_id)
-            generate_company_insights(db, lead.lead_id)
+            analyze_and_store_lead_intelligence(db, lead.lead_id)
             count += 1
     return {"scored_count": count}
 
@@ -288,14 +310,17 @@ def generate_outreach(req: OutreachRequest, db: Session = Depends(get_db)):
             "decision_maker_summary": insight.decision_maker_summary,
         }
 
-    return generate_personalized_email(
-        lead=lead,
-        insight_data=insight_dict,
-        angle=req.angle,
-        tone=req.tone,
-        custom_note=req.custom_note,
-        preferred_provider=req.preferred_provider,
-    )
+    try:
+        return generate_personalized_email(
+            lead=lead,
+            insight_data=insight_dict,
+            angle=req.angle,
+            tone=req.tone,
+            custom_note=req.custom_note,
+            preferred_provider=req.preferred_provider,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @app.post("/api/outreach/save-draft", tags=["Outreach"])
@@ -336,4 +361,4 @@ def send_outreach_email(req: SendOutreachRequest, db: Session = Depends(get_db))
 @app.get("/api/llm/providers", tags=["AI Engine"])
 def get_llm_providers():
     from backend.ai_agents.llm_client import llm_client
-    return llm_client.get_available_providers()
+    return llm_client.get_available_providers()

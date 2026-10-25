@@ -39,50 +39,33 @@ def qualification_agent_node(state: AgentState) -> Dict[str, Any]:
     """
 
     llm_output = llm_client.generate_json(QUALIFICATION_AGENT_SYSTEM_PROMPT, user_payload)
-    if llm_output and "qualification_score" in llm_output:
-        trace.append(f"QualificationAgent: Computed qualification score of {llm_output['qualification_score']} via LLM.")
-        return {
-            "qualification_score": llm_output.get("qualification_score", 85),
-            "high_growth_potential": llm_output.get("high_growth_potential", "Series" in str(funding)),
-            "funding_analysis": llm_output.get(
-                "funding_analysis", f"{funding} funding provides verified expansion budget."
-            ),
-            "tech_alignment_metrics": llm_output.get(
-                "tech_alignment_metrics", _build_tech_alignment(tech_components)
-            ),
-            "overall_tech_compatibility_score": llm_output.get("overall_tech_compatibility_score", 88),
-            "decision_makers": llm_output.get(
-                "decision_makers", _profile_decision_makers(contact_name, industry)
-            ),
-            "business_needs_summary": llm_output.get(
-                "business_needs_summary", "Needs modern automated AI orchestration to accelerate sales pipeline throughput."
-            ),
-            "strategic_recommendation": llm_output.get(
-                "strategic_recommendation", "Direct outreach highlighting 40% infra cost reduction and 65% faster cycle times."
-            ),
-            "execution_trace": trace,
-        }
-
-    # Deterministic IEEE SRS Compliant Scoring Engine
-    score = _calculate_qualification_score(funding, revenue, size, tech_stack_raw, contact_name)
-    high_growth = _check_high_growth(funding, capital)
-    funding_analysis = _generate_funding_analysis(company_name, funding, capital)
-    tech_metrics, overall_compat = _build_tech_alignment(tech_components)
-    decision_makers = _profile_decision_makers(contact_name, industry)
-    needs_summary = _build_needs_summary(company_name, funding, tech_stack_raw)
-    recommendation = _build_strategic_recommendation(company_name, funding, score)
-
-    trace.append(f"QualificationAgent: Calculated qualification score of {score}/100. High Growth = {high_growth}.")
-
+    required_fields = (
+        "qualification_score",
+        "high_growth_potential",
+        "funding_analysis",
+        "tech_alignment_metrics",
+        "overall_tech_compatibility_score",
+        "decision_makers",
+        "business_needs_summary",
+        "strategic_recommendation",
+    )
+    if not isinstance(llm_output, dict) or any(
+        field not in llm_output for field in required_fields
+    ):
+        raise RuntimeError("Qualification agent returned incomplete output.")
+    score = llm_output["qualification_score"]
+    if not isinstance(score, int) or not 0 <= score <= 100:
+        raise RuntimeError("Qualification agent returned an invalid score.")
+    trace.append(f"QualificationAgent: Computed qualification score of {score} via LLM.")
     return {
         "qualification_score": score,
-        "high_growth_potential": high_growth,
-        "funding_analysis": funding_analysis,
-        "tech_alignment_metrics": tech_metrics,
-        "overall_tech_compatibility_score": overall_compat,
-        "decision_makers": decision_makers,
-        "business_needs_summary": needs_summary,
-        "strategic_recommendation": recommendation,
+        "high_growth_potential": llm_output["high_growth_potential"],
+        "funding_analysis": llm_output["funding_analysis"],
+        "tech_alignment_metrics": llm_output["tech_alignment_metrics"],
+        "overall_tech_compatibility_score": llm_output["overall_tech_compatibility_score"],
+        "decision_makers": llm_output["decision_makers"],
+        "business_needs_summary": llm_output["business_needs_summary"],
+        "strategic_recommendation": llm_output["strategic_recommendation"],
         "execution_trace": trace,
     }
 

@@ -29,32 +29,12 @@ def render_scoring_hub():
         unsafe_allow_html=True,
     )
 
-    # 1. Fetch queue from backend or fallback to session state
+    # 1. Fetch the authoritative queue from the backend
     queue = fetch_scoring_queue_api()
-    if not queue:
-        session_leads = st.session_state.get("recent_ingested_leads", [])
-        if session_leads:
-            queue = []
-            for idx, sl in enumerate(session_leads, start=1):
-                lid = sl.get("lead_id", idx)
-                sc = sl.get("score", 76 if idx == 1 else (52 if idx == 2 else 28))
-                prob = round(sc * 0.72 + 2.5, 1)
-                queue.append({
-                    "lead_id": lid,
-                    "company_name": sl.get("company_name", f"Account #{lid}"),
-                    "contact_name": sl.get("contact_name", "Key Contact"),
-                    "contact_title": sl.get("contact_title", "Executive"),
-                    "email": sl.get("email", ""),
-                    "funding_stage": sl.get("funding_stage", "Series B"),
-                    "industry": sl.get("industry", "Cloud Software"),
-                    "score": sc,
-                    "conversion_probability": prob,
-                    "priority": "hot" if sc >= 75 else ("warm" if sc >= 40 else "cold"),
-                })
 
     if not queue:
         with st.container(border=True):
-            st.info("No leads available in PostgreSQL. Ingest prospects in Tab 1 to begin scoring.")
+            st.error("Unable to load the scoring queue from the backend.")
         return
 
     # 2. Master-Detail Split: Left Queue (1.6) | Right Dossier (2.4)
@@ -151,35 +131,9 @@ def render_scoring_hub():
         sel_id = st.session_state.get("selected_lead_id")
         dossier = fetch_lead_dossier_api(sel_id) if sel_id else None
 
-        # Fallback dossier if backend is offline
         if not dossier and sel_id:
-            lead_summary = next((q for q in queue if q["lead_id"] == sel_id), queue[0] if queue else None)
-            if lead_summary:
-                dossier = {
-                    "lead_id": lead_summary["lead_id"],
-                    "company_name": lead_summary["company_name"],
-                    "contact_name": lead_summary.get("contact_name", "Key Contact"),
-                    "contact_title": lead_summary.get("contact_title", "VP of Engineering"),
-                    "email": lead_summary.get("email", "contact@prospect.com"),
-                    "location": "San Francisco, CA",
-                    "funding_stage": lead_summary.get("funding_stage", "Series B"),
-                    "tech_stack": ["AWS", "PostgreSQL", "Kubernetes"],
-                    "scoring": {
-                        "score": lead_summary.get("score", 78),
-                        "conversion_probability": lead_summary.get("conversion_probability", 58.6),
-                        "priority": lead_summary.get("priority", "hot"),
-                        "factors": {
-                            "firmographic_fit": {"score": 26, "max": 30, "label": "Company Size & Headcount Fit"},
-                            "tech_alignment": {"score": 22, "max": 25, "label": "Tech Stack Alignment"},
-                            "growth_velocity": {"score": 18, "max": 25, "label": "Funding & Growth Stage"},
-                            "decision_maker": {"score": 16, "max": 20, "label": "Decision-Maker Level"},
-                        },
-                    },
-                    "insights": {
-                        "business_needs": f"Scaling operations at {lead_summary['company_name']}. High data volume requires streamlined pipeline automation.",
-                        "opportunities": "Significant opportunity to replace manual forecasting with predictive AI scoring, cutting cycle times by 35%.",
-                    },
-                }
+            st.error("Unable to load the AI dossier for the selected lead.")
+            return
 
         if not dossier:
             with st.container(border=True):

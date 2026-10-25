@@ -177,9 +177,9 @@ def save_outreach_draft_api(lead_id: int, subject: str, body: str) -> tuple[bool
         res = requests.post(f"{API_BASE_URL}/api/outreach/save-draft", json=payload, timeout=4.0)
         if res.status_code in (200, 201):
             return True, "Draft saved successfully!"
-        return True, "Draft stored locally in session (backend staging)."
+        return False, res.json().get("detail", "Draft could not be saved.")
     except requests.RequestException:
-        return True, "Draft stored in active session."
+        return False, "Draft could not be saved because the backend is unavailable."
 
 
 def send_outreach_email_api(lead_id: int, subject: str, body: str) -> tuple[bool, str]:
@@ -189,9 +189,9 @@ def send_outreach_email_api(lead_id: int, subject: str, body: str) -> tuple[bool
         res = requests.post(f"{API_BASE_URL}/api/outreach/send", json=payload, timeout=5.0)
         if res.status_code in (200, 201):
             return True, "Outreach email dispatched and interaction logged!"
-        return True, "Outreach dispatched (Simulated delivery)."
+        return False, "Outreach was not sent."
     except requests.RequestException:
-        return True, "Outreach dispatched (Simulated delivery)."
+        return False, "Outreach was not sent because the backend is unavailable."
 
 
 def analyze_lead_api(lead_id: int) -> tuple[bool, dict | str]:

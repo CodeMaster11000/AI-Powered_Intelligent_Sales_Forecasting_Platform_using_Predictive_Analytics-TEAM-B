@@ -19,7 +19,31 @@ You MUST analyze the prospect according to IEEE Std 830-1998 REQ-M2-01 & REQ-M2-
    - Process Automation Potential: High manual sales/ops friction suitable for AI workflows, RPA, or automated pipelines.
    - Digital Transformation Projects: Overall digitization, API modernization, real-time analytics.
 
-Output strictly valid JSON matching the specified schema. Ground all claims strictly on the provided prospect data. Do not hallucinate external acquisitions or revenue numbers."""
+Return ONLY valid JSON with exactly these top-level keys:
+{
+  "industry_domain_analysis": "string",
+  "growth_indicators": ["string"],
+  "tech_stack_components": {
+    "Cloud": ["string"],
+    "Backend": ["string"],
+    "Frontend": ["string"],
+    "Data/DB": ["string"],
+    "DevOps": ["string"]
+  },
+  "transformation_opportunities": [
+    {
+      "opportunity_name": "string",
+      "detected": true,
+      "confidence": 0.0,
+      "details": "string",
+      "impact_level": "string",
+      "estimated_roi_timeline": "string"
+    }
+  ]
+}
+Do not use alternative key names such as "tech_stack_compatibility" or
+"explicit_business_transformation_opportunities". Ground all claims strictly on
+the provided prospect data. Do not hallucinate external acquisitions or revenue numbers."""
 
 QUALIFICATION_AGENT_SYSTEM_PROMPT = """You are the Lead Qualification and Scoring Agent in the SalesGenie AI Platform.
 Your mission is to calculate the overall Qualification Score (0-100) and derive structured qualitative insights according to IEEE SRS REQ-M2-03:
@@ -35,7 +59,33 @@ Your mission is to calculate the overall Qualification Score (0-100) and derive 
 4. Decision Maker Identification:
    - Persona analysis for the primary contact and likely buying committee.
 
-Output strictly valid JSON matching the specified schema."""
+Return ONLY valid JSON with exactly these top-level keys:
+{
+  "qualification_score": 0,
+  "high_growth_potential": true,
+  "funding_analysis": "string",
+  "tech_alignment_metrics": [
+    {
+      "category": "string",
+      "prospect_stack": ["string"],
+      "compatibility_score": 0,
+      "alignment_notes": "string"
+    }
+  ],
+  "overall_tech_compatibility_score": 0,
+  "decision_makers": [
+    {
+      "name": "string",
+      "role_title": "string",
+      "recommended_pitch_angle": "string"
+    }
+  ],
+  "business_needs_summary": "string",
+  "strategic_recommendation": "string"
+}
+Use a boolean for "high_growth_potential", not an object. Do not use
+"scoring_breakdown" or "decision_maker_identification". Keep all scores between
+0 and 100 and ground claims strictly on the provided prospect data."""
 
 OUTREACH_AGENT_SYSTEM_PROMPT = """You are the AI Outreach & Personalization Specialist for SalesGenie AI.
 Your mission is to craft hyper-personalized, high-converting B2B sales outreach emails tailored to key enterprise decision makers.
@@ -69,4 +119,3 @@ Guidelines:
      "call_to_action": "Recommended CTA style"
    }
 """
-

@@ -19,38 +19,6 @@ except ModuleNotFoundError:
         fetch_llm_providers_api,
     )
 
-from modules.module3_outreach import generate_personalized_email
-
-
-def synthesize_offline_draft(
-    company: str,
-    contact: str,
-    title: str,
-    tech_stack: list,
-    angle: str,
-    tone: str,
-    custom_notes: str = "",
-    funding_stage: str = "Growth",
-    industry: str = "Technology",
-) -> dict:
-    """Local resilient synthesizer powered by the AI Outreach Agent heuristic engine."""
-    mock_lead = {
-        "company_name": company,
-        "contact_name": contact,
-        "contact_title": title,
-        "tech_stack": tech_stack,
-        "funding_stage": funding_stage,
-        "industry": industry,
-    }
-    return generate_personalized_email(
-        lead=mock_lead,
-        insight_data={},
-        angle=angle,
-        tone=tone,
-        custom_note=custom_notes,
-    )
-
-
 def render_outreach_studio():
     """Renders the AI Cold Outreach Generation Studio with Multi-LLM Orchestration."""
     
@@ -64,23 +32,12 @@ def render_outreach_studio():
         unsafe_allow_html=True,
     )
 
-    # 1. Fetch queue with offline fallback
+    # 1. Fetch the authoritative queue from the backend
     queue = fetch_scoring_queue_api()
-    if not queue:
-        session_leads = st.session_state.get("recent_ingested_leads", [])
-        if session_leads:
-            queue = []
-            for idx, sl in enumerate(session_leads, start=1):
-                queue.append({
-                    "lead_id": sl.get("lead_id", idx),
-                    "company_name": sl.get("company_name", f"Account #{idx}"),
-                    "contact_name": sl.get("contact_name", "Key Contact"),
-                    "priority": sl.get("priority", "hot"),
-                })
 
     if not queue:
         with st.container(border=True):
-            st.info("No leads available. Please ingest and score leads first in Tab 1.")
+            st.error("Unable to load scored leads from the backend.")
         return
 
     # 2. Select target prospect
@@ -104,18 +61,8 @@ def render_outreach_studio():
     # 3. Fetch Dossier
     dossier = fetch_lead_dossier_api(target_id)
     if not dossier:
-        # Fallback dossier for offline testing
-        target_item = next((q for q in queue if q["lead_id"] == target_id), queue[0])
-        dossier = {
-            "lead_id": target_id,
-            "company_name": target_item.get("company_name", "Acme Corp"),
-            "contact_name": target_item.get("contact_name", "Sarah Jenkins"),
-            "contact_title": "VP of Engineering",
-            "email": "sarah@acmecloud.io",
-            "funding_stage": "Series B",
-            "industry": "Enterprise Software",
-            "tech_stack": ["AWS", "PostgreSQL", "Kubernetes"],
-        }
+        st.error("Unable to load the AI dossier for this lead.")
+        return
 
     # Fetch available LLM Providers for multi-model versatility
     llm_info = fetch_llm_providers_api()
@@ -134,7 +81,7 @@ def render_outreach_studio():
             
             # Multi-LLM Provider Selector
             provider_choices = {
-                "🤖 Auto-Cascade (Gemini ➔ OpenAI ➔ Grok ➔ Ollama)": "auto",
+                "🤖 First configured provider": "auto",
                 "✨ Google Gemini (Primary Enterprise)": "gemini",
                 "⚡ OpenAI (GPT-4o-mini)": "openai",
                 "🚀 xAI Grok (grok-2-latest)": "grok",
@@ -144,7 +91,7 @@ def render_outreach_studio():
                 "AI Model Provider",
                 options=list(provider_choices.keys()),
                 index=0,
-                help="SalesGenie supports multi-LLM versatility: Google Gemini, OpenAI, xAI Grok, and offline Local Ollama.",
+                help="Select the provider used for this generation. A failed provider does not fall back to another model.",
             )
             preferred_provider_key = provider_choices[selected_provider_label]
 
@@ -198,17 +145,8 @@ def render_outreach_studio():
                         preferred_provider=preferred_provider_key,
                     )
                     if not new_draft:
-                        new_draft = synthesize_offline_draft(
-                            dossier["company_name"],
-                            dossier["contact_name"],
-                            dossier.get("contact_title", "Executive"),
-                            stack_list,
-                            angle,
-                            tone,
-                            custom_notes=custom_notes,
-                            funding_stage=dossier.get("funding_stage", "Growth"),
-                            industry=dossier.get("industry", "Technology"),
-                        )
+                        st.error("The outreach model did not produce a valid draft.")
+                        st.stop()
                 st.session_state["current_draft"] = new_draft
                 st.session_state["draft_lead_id"] = target_id
                 st.session_state["draft_version"] += 1
@@ -216,7 +154,7 @@ def render_outreach_studio():
 
     # --- RIGHT PANE: THE DRAFT EDITOR ---
     with s_col2:
-        # Load draft from API or offline synthesizer
+        # Load the draft generated by the backend model
         if "current_draft" not in st.session_state or st.session_state.get("draft_lead_id") != target_id:
             live_draft = generate_outreach_api(
                 target_id,
@@ -226,23 +164,14 @@ def render_outreach_studio():
                 preferred_provider=preferred_provider_key,
             )
             if not live_draft:
-                live_draft = synthesize_offline_draft(
-                    dossier["company_name"],
-                    dossier["contact_name"],
-                    dossier.get("contact_title", "Executive"),
-                    stack_list,
-                    angle,
-                    tone,
-                    custom_notes=custom_notes,
-                    funding_stage=dossier.get("funding_stage", "Growth"),
-                    industry=dossier.get("industry", "Technology"),
-                )
+                st.error("The outreach model did not produce a valid draft.")
+                return
             st.session_state["current_draft"] = live_draft
             st.session_state["draft_lead_id"] = target_id
 
         draft = st.session_state.get("current_draft", {})
-        subject_options = draft.get("subject_options", [f"Introduction: {dossier['company_name']}"])
-        provider_used = draft.get("provider_used", "SalesGenie AI Multi-LLM Engine")
+        subject_options = draft["subject_options"]
+        provider_used = draft["provider_used"]
 
         with st.container(border=True):
             st.markdown(

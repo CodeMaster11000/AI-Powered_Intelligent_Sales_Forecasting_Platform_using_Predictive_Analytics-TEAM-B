@@ -2,5 +2,6 @@
 #   pip install -r requirements-ai.txt
 -r requirements.txt
 openai
+google-genai
 langchain
 langgraph

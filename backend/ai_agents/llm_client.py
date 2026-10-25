@@ -16,7 +16,7 @@ class LLMClient:
     2. OpenAI (gpt-4o / gpt-4o-mini)
     3. xAI Grok (grok-2-latest / grok-beta)
     4. Local LLMs via Ollama (llama3 / mistral / qwen2.5)
-    5. Automatic cascading fallback & resilient offline heuristics.
+    5. Explicit provider selection without heuristic fallback output.
     """
 
     def __init__(self):
@@ -34,9 +34,9 @@ class LLMClient:
         self.gemini_model_name = os.environ.get("GEMINI_MODEL", "gemini-1.5-pro")
         if gemini_key:
             try:
-                import google.generativeai as genai
-                genai.configure(api_key=gemini_key)
-                self.gemini_model = genai.GenerativeModel(self.gemini_model_name)
+                from google import genai
+
+                self.gemini_client = genai.Client(api_key=gemini_key)
                 self.gemini_available = True
                 logger.info(f"Gemini LLM Provider initialized ({self.gemini_model_name}).")
             except Exception as e:
@@ -131,7 +131,7 @@ class LLMClient:
     ) -> Optional[Dict[str, Any]]:
         """
         Invokes LLM with system and user prompts, expecting a JSON response.
-        Cascades through configured providers: Preferred -> Gemini -> OpenAI -> Grok -> Ollama.
+        Uses the selected provider and returns None when it cannot produce valid JSON.
         Returns parsed dictionary, or None if all providers fail or are unconfigured.
         """
         pref = (preferred_provider or os.environ.get("PREFERRED_LLM_PROVIDER", "auto")).lower()
@@ -143,24 +143,28 @@ class LLMClient:
                 if result is not None:
                     self.last_provider_used = f"Google Gemini ({self.gemini_model_name})"
                     return result
+                return None
 
             elif provider == "openai" and self.openai_available:
                 result = self._call_openai_json(system_prompt, user_prompt, temperature)
                 if result is not None:
                     self.last_provider_used = f"OpenAI ({self.openai_model_name})"
                     return result
+                return None
 
             elif provider == "grok" and self.grok_available:
                 result = self._call_grok_json(system_prompt, user_prompt, temperature)
                 if result is not None:
                     self.last_provider_used = f"xAI Grok ({self.grok_model_name})"
                     return result
+                return None
 
             elif provider == "ollama" and (self.ollama_available or pref == "ollama"):
                 result = self._call_ollama_json(system_prompt, user_prompt, temperature)
                 if result is not None:
                     self.last_provider_used = f"Local Ollama ({self.ollama_model_name})"
                     return result
+                return None
 
         return None
 
@@ -181,9 +185,10 @@ class LLMClient:
             if provider == "gemini" and self.gemini_available:
                 try:
                     full_prompt = f"{system_prompt}\n\nUSER PROMPT:\n{user_prompt}"
-                    res = self.gemini_model.generate_content(
-                        full_prompt,
-                        generation_config={"temperature": temperature}
+                    res = self.gemini_client.models.generate_content(
+                        model=self.gemini_model_name,
+                        contents=full_prompt,
+                        config={"temperature": temperature},
                     )
                     if res and res.text:
                         self.last_provider_used = f"Google Gemini ({self.gemini_model_name})"
@@ -254,9 +259,13 @@ class LLMClient:
     def _call_gemini_json(self, system_prompt: str, user_prompt: str, temperature: float) -> Optional[Dict[str, Any]]:
         try:
             full_prompt = f"{system_prompt}\n\nUSER DATA:\n{user_prompt}\n\nReturn ONLY a valid JSON object."
-            response = self.gemini_model.generate_content(
-                full_prompt,
-                generation_config={"temperature": temperature, "response_mime_type": "application/json"}
+            response = self.gemini_client.models.generate_content(
+                model=self.gemini_model_name,
+                contents=full_prompt,
+                config={
+                    "temperature": temperature,
+                    "response_mime_type": "application/json",
+                },
             )
             return self._parse_json(response.text)
         except Exception as e:

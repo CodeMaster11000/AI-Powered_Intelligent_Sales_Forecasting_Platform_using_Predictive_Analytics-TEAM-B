@@ -24,24 +24,16 @@ def render_intelligence_view():
     )
 
     if analysis_mode == "📋 Analyze Ingested Database Lead":
-        leads = fetch_leads_api(limit=50)
-
-        # If no backend leads, fallback to session state leads if available
-        session_leads = st.session_state.get("recent_ingested_leads", [])
-
-        if not leads and not session_leads:
-            st.info("ℹ️ No leads found in database or session yet. Upload a CSV or add a lead in Tab 1 or Tab 2, or use 'Ad-Hoc Prospect Evaluation' above.")
+        # leads = fetch_leads_api(limit=50)
+        leads = fetch_leads_api()
+        if not leads:
+            st.error("Unable to load leads from the backend.")
             return
 
         lead_options = {}
         for l in leads:
             label = f"ID #{l.get('lead_id')}: {l.get('company_name')} ({l.get('industry') or 'General'}) - {l.get('email')}"
             lead_options[label] = l
-
-        for i, sl in enumerate(session_leads):
-            label = f"Session Lead #{i+1}: {sl.get('company_name')} ({sl.get('industry') or 'General'})"
-            if label not in lead_options:
-                lead_options[label] = sl
 
         selected_label = st.selectbox("Choose Prospect to Analyze:", list(lead_options.keys()))
         selected_lead = lead_options[selected_label]
