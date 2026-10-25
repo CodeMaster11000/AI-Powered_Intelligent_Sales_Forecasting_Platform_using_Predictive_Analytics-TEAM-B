@@ -38,37 +38,23 @@ def research_agent_node(state: AgentState) -> Dict[str, Any]:
     # Attempt LLM extraction
     llm_output = llm_client.generate_json(RESEARCH_AGENT_SYSTEM_PROMPT, user_payload)
 
-    if llm_output and "transformation_opportunities" in llm_output:
-        trace.append("ResearchAgent: Extracted profile and transformation opportunities via LLM.")
-        return {
-            "industry_domain_analysis": llm_output.get(
-                "industry_domain_analysis", f"Deep enterprise domain analysis for {company_name} in {industry}."
-            ),
-            "growth_indicators": llm_output.get(
-                "growth_indicators", [f"{funding} stage with {capital} capital"]
-            ),
-            "tech_stack_components": llm_output.get(
-                "tech_stack_components", _parse_tech_stack_components(tech_stack_raw)
-            ),
-            "transformation_opportunities": llm_output.get(
-                "transformation_opportunities", _detect_opportunities(tech_stack_raw, industry, size)
-            ),
-            "execution_trace": trace,
-        }
+    required_fields = (
+        "industry_domain_analysis",
+        "growth_indicators",
+        "tech_stack_components",
+        "transformation_opportunities",
+    )
+    if not isinstance(llm_output, dict) or any(
+        field not in llm_output for field in required_fields
+    ):
+        raise RuntimeError("Research agent returned incomplete output.")
 
-    # Deterministic Heuristic Engine (Grounded fallback per IEEE SRS specifications)
-    trace.append("ResearchAgent: Applied IEEE 830 compliant rule-based intelligence grounding engine.")
-
-    tech_components = _parse_tech_stack_components(tech_stack_raw)
-    opportunities = _detect_opportunities(tech_stack_raw, industry, size)
-    growth_indicators = _extract_growth_indicators(funding, capital, size, revenue)
-    domain_analysis = _generate_domain_analysis(company_name, industry, size, location)
-
+    trace.append("ResearchAgent: Extracted profile and transformation opportunities via LLM.")
     return {
-        "industry_domain_analysis": domain_analysis,
-        "growth_indicators": growth_indicators,
-        "tech_stack_components": tech_components,
-        "transformation_opportunities": opportunities,
+        "industry_domain_analysis": llm_output["industry_domain_analysis"],
+        "growth_indicators": llm_output["growth_indicators"],
+        "tech_stack_components": llm_output["tech_stack_components"],
+        "transformation_opportunities": llm_output["transformation_opportunities"],
         "execution_trace": trace,
     }
 

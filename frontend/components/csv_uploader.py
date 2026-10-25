@@ -186,9 +186,12 @@ def render_csv_uploader():
         with val_col2:
             users_list = fetch_users()
             user_options = {u["name"]: u["user_id"] for u in users_list}
+            if not user_options:
+                st.error("Unable to load lead owners from the backend.")
+                return
             owner_name = st.selectbox(
                 "Assign Ingested Leads To",
-                options=list(user_options.keys()) if user_options else ["Alex Rep"],
+                options=list(user_options.keys()),
                 index=0,
             )
             selected_owner_id = user_options.get(owner_name)
@@ -275,12 +278,4 @@ def render_csv_uploader():
                     st.toast(f"Committed {imported} leads to PostgreSQL! ({skipped} duplicates skipped)", icon="✅")
                     st.rerun()
                 else:
-                    # Dev fallback if backend is offline
-                    if "Backend is offline" in str(result):
-                        st.session_state.setdefault("recent_ingested_leads", []).extend(leads_to_post)
-                        st.session_state["session_additions"] += len(leads_to_post)
-                        st.session_state["demo_active"] = False
-                        st.warning(f"Backend offline: Staged {len(leads_to_post)} leads in local session memory.")
-                        st.rerun()
-                    else:
-                        st.error(f"Import failed: {result}")
+                    st.error(f"Import failed: {result}")

@@ -35,7 +35,10 @@ def render_manual_form():
 
     # Fetch live users for owner assignment
     users_list = fetch_users()
-    user_options = {u["name"]: u["user_id"] for u in users_list} if users_list else {"Alex Rep": 1}
+    user_options = {u["name"]: u["user_id"] for u in users_list}
+    if not user_options:
+        st.error("Unable to load lead owners from the backend.")
+        return
 
     # 2x2 Grid of Semantic Cards
     row1_left, row1_right = st.columns(2)
