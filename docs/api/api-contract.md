@@ -71,6 +71,8 @@ it as `qualification_score * 0.85`).
 | `GET` | `/api/users` | Users | List seeded sales users | `200` |
 | `GET` | `/api/leads/stats` | Leads | Return pipeline KPIs | `200` |
 | `POST` | `/api/leads` | Leads | Create one lead | `201` |
+| `PUT` | `/api/leads/{lead_id}` | Leads | Replace an existing lead | `200` |
+| `DELETE` | `/api/leads/{lead_id}` | Leads | Delete a lead and dependent AI records | `204` |
 | `POST` | `/api/leads/bulk` | Leads | Import multiple leads | `201` |
 | `GET` | `/api/leads` | Leads | Search and list leads | `200` |
 | `POST` | `/api/leads/{lead_id}/analyze` | Lead Intelligence | Analyze and persist AI intelligence | `200` |
@@ -168,6 +170,29 @@ Creates one lead. Email uniqueness is enforced by the service.
 Returns a complete [Lead object](#lead-object) with `201`. An existing email
 returns `400`.
 
+### `PUT /api/leads/{lead_id}`
+
+Replaces all editable fields for an existing lead. The payload uses the same
+fields and validation rules as the create endpoint:
+
+```json
+{
+  "company_name": "Acme Cloud",
+  "email": "new-buyer@acme.example",
+  "lead_status": "Qualified",
+  "source": "Website Form",
+  "tech_stack": ["AWS", "Python"]
+}
+```
+
+Returns the updated [Lead object](#lead-object) with `200`. Unknown lead IDs
+return `404`; an email already used by another lead returns `400`.
+
+### `DELETE /api/leads/{lead_id}`
+
+Deletes the lead and its dependent company insight and score records. Returns
+`204 No Content`. Unknown lead IDs return `404`.
+
 ### `POST /api/leads/bulk`
 
 Imports an array of the same lead payloads accepted by the single-create
@@ -251,8 +276,9 @@ recommendation. Both agents use the configured LLM provider cascade.
 
 ### `POST /api/leads/{lead_id}/analyze`
 
-Takes no body. Runs the graph for an existing lead, stores/updates its
-`company_insights` and `lead_scores` records, and returns:
+Takes no body. Runs the graph for an existing lead, stores a complete immutable
+`lead_analysis_runs` record, updates the compatibility `company_insights` and
+`lead_scores` records, and returns:
 
 ```json
 {
@@ -262,9 +288,13 @@ Takes no body. Runs the graph for an existing lead, stores/updates its
   "conversion_probability": 69.7,
   "lead_status": "Qualified",
   "high_growth_potential": true,
+  "funding_analysis": "Series B funding supports expansion.",
+  "overall_tech_compatibility_score": 88,
   "business_needs": "Reduce deployment friction and forecast variance.",
   "strategic_recommendation": "Prioritize an executive discovery session.",
   "industry_analysis": "Acme Cloud operates in the SaaS sector...",
+  "growth_indicators": ["Series B funding signaling expansion"],
+  "tech_stack_components": { "Cloud": ["AWS"], "Backend": ["Python"] },
   "transformation_opportunities": [
     {
       "opportunity_name": "Cloud Migration Opportunities",
@@ -281,6 +311,8 @@ Takes no body. Runs the graph for an existing lead, stores/updates its
   "decision_makers": [
     { "name": "Jane Doe", "role": "VP Engineering" }
   ],
+  "execution_trace": ["ResearchAgent: ...", "QualificationAgent: ..."],
+  "errors": [],
   "execution_latency_seconds": 2.341
 }
 ```
@@ -295,22 +327,27 @@ generated:
 
 ```json
 {
-  "insight_id": 55,
+  "analysis_id": 72,
   "lead_id": 101,
   "qualification_score": 82,
   "conversion_probability": 69.7,
   "business_needs": "Reduce deployment friction.",
+  "strategic_recommendation": "Prioritize an executive discovery session.",
   "opportunities": [],
+  "transformation_opportunities": [],
   "industry_analysis": "Acme Cloud operates in the SaaS sector...",
   "growth_indicators": ["Series B funding signaling expansion"],
   "tech_alignment": [],
   "decision_maker_summary": [],
+  "decision_makers": [],
+  "execution_trace": [],
   "generated_at": "2026-10-26 14:31:02+00:00"
 }
 ```
 
-The persisted JSON columns are decoded into arrays/objects when valid. If old
-or malformed persisted JSON is encountered, the raw value may be returned.
+The latest complete structured run is returned, with JSONB fields decoded into
+arrays/objects. Older leads without a `lead_analysis_runs` row are automatically
+rescored when their predictive dossier is opened.
 
 ### `POST /api/leads/batch-analyze`
 

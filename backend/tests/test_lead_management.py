@@ -3,8 +3,13 @@ from unittest.mock import Mock
 import pytest
 from pydantic import ValidationError
 
-from backend.schema import BulkLeadImportRequest, LeadCreate
-from modules.module1_leads import bulk_import_leads, create_single_lead
+from backend.schema import BulkLeadImportRequest, LeadCreate, LeadUpdate
+from modules.module1_leads import (
+    bulk_import_leads,
+    create_single_lead,
+    delete_single_lead,
+    update_single_lead,
+)
 
 
 def lead_payload(email: str = "buyer@example.com") -> LeadCreate:
@@ -41,6 +46,33 @@ def test_create_single_lead_rejects_duplicate_email():
 
     db.add.assert_not_called()
     db.commit.assert_not_called()
+
+
+def test_update_single_lead_persists_changes_and_allows_same_email():
+    db = Mock()
+    existing = Mock(lead_id=7)
+    db.get.return_value = existing
+    db.execute.return_value = db_result()
+    update = LeadUpdate(company_name="Updated Corp", email="buyer@example.com")
+
+    updated = update_single_lead(db, 7, update)
+
+    assert updated is existing
+    assert existing.company_name == "Updated Corp"
+    assert existing.email == "buyer@example.com"
+    db.commit.assert_called_once_with()
+    db.refresh.assert_called_once_with(existing)
+
+
+def test_delete_single_lead_removes_record():
+    db = Mock()
+    existing = Mock(lead_id=7)
+    db.get.return_value = existing
+
+    delete_single_lead(db, 7)
+
+    db.delete.assert_called_once_with(existing)
+    db.commit.assert_called_once_with()
 
 
 def test_bulk_import_skips_existing_and_case_insensitive_batch_duplicates():
