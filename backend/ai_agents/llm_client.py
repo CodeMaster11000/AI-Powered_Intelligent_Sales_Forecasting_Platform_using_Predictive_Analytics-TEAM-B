@@ -36,7 +36,10 @@ class LLMClient:
             try:
                 from google import genai
 
-                self.gemini_client = genai.Client(api_key=gemini_key)
+                self.gemini_client = genai.Client(
+                    api_key=gemini_key,
+                    http_options={"timeout": 2000},
+                )
                 self.gemini_available = True
                 logger.info(f"Gemini LLM Provider initialized ({self.gemini_model_name}).")
             except Exception as e:
@@ -242,7 +245,7 @@ class LLMClient:
                         "stream": False,
                         "options": {"temperature": temperature}
                     }
-                    res = httpx.post(f"{self.ollama_base_url}/api/chat", json=payload, timeout=20.0)
+                    res = httpx.post(f"{self.ollama_base_url}/api/chat", json=payload, timeout=120.0)
                     if res.status_code == 200:
                         data = res.json()
                         text = data.get("message", {}).get("content", "")
@@ -317,9 +320,10 @@ class LLMClient:
                 ],
                 "format": "json",
                 "stream": False,
+                "think": False,
                 "options": {"temperature": temperature}
             }
-            res = httpx.post(f"{self.ollama_base_url}/api/chat", json=payload, timeout=20.0)
+            res = httpx.post(f"{self.ollama_base_url}/api/chat", json=payload, timeout=180.0)
             if res.status_code == 200:
                 data = res.json()
                 text = data.get("message", {}).get("content", "")

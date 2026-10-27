@@ -52,7 +52,30 @@ def qualification_agent_node(state: AgentState) -> Dict[str, Any]:
     if not isinstance(llm_output, dict) or any(
         field not in llm_output for field in required_fields
     ):
-        raise RuntimeError("Qualification agent returned incomplete output.")
+        score = _calculate_qualification_score(
+            funding, revenue, size, tech_stack_raw, contact_name
+        )
+        tech_alignment_metrics, compatibility_score = _build_tech_alignment(
+            tech_components
+        )
+        llm_output = {
+            "qualification_score": score,
+            "high_growth_potential": _check_high_growth(funding, capital),
+            "funding_analysis": _generate_funding_analysis(
+                company_name, funding, capital
+            ),
+            "tech_alignment_metrics": tech_alignment_metrics,
+            "overall_tech_compatibility_score": compatibility_score,
+            "decision_makers": _profile_decision_makers(contact_name, industry),
+            "business_needs_summary": _build_needs_summary(
+                company_name, funding, tech_stack_raw
+            ),
+            "strategic_recommendation": (
+                "Prioritize a discovery session focused on measurable sales "
+                "efficiency and pipeline visibility."
+            ),
+        }
+        trace.append("QualificationAgent: Used deterministic fallback after LLM timeout or incomplete output.")
     score = llm_output["qualification_score"]
     if not isinstance(score, int) or not 0 <= score <= 100:
         raise RuntimeError("Qualification agent returned an invalid score.")

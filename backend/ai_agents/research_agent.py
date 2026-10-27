@@ -47,7 +47,19 @@ def research_agent_node(state: AgentState) -> Dict[str, Any]:
     if not isinstance(llm_output, dict) or any(
         field not in llm_output for field in required_fields
     ):
-        raise RuntimeError("Research agent returned incomplete output.")
+        llm_output = {
+            "industry_domain_analysis": _generate_domain_analysis(
+                company_name, industry, size, location
+            ),
+            "growth_indicators": _extract_growth_indicators(
+                funding, capital, size, revenue
+            ),
+            "tech_stack_components": _parse_tech_stack_components(tech_stack_raw),
+            "transformation_opportunities": _detect_opportunities(
+                tech_stack_raw, industry, size
+            ),
+        }
+        trace.append("ResearchAgent: Used deterministic fallback after LLM timeout or incomplete output.")
 
     trace.append("ResearchAgent: Extracted profile and transformation opportunities via LLM.")
     return {

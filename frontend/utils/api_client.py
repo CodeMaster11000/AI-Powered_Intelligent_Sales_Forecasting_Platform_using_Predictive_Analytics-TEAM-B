@@ -197,7 +197,7 @@ def send_outreach_email_api(lead_id: int, subject: str, body: str) -> tuple[bool
 def analyze_lead_api(lead_id: int) -> tuple[bool, dict | str]:
     """Runs the LangGraph intelligence pipeline for a stored lead."""
     try:
-        res = requests.post(f"{API_BASE_URL}/api/leads/{lead_id}/analyze", timeout=30.0)
+        res = requests.post(f"{API_BASE_URL}/api/leads/{lead_id}/analyze", timeout=300.0)
         if res.status_code == 200:
             return True, res.json()
         return False, res.json().get("detail", res.text)
@@ -222,7 +222,7 @@ def analyze_prospect_ad_hoc_api(payload: dict) -> tuple[bool, dict | str]:
         res = requests.post(
             f"{API_BASE_URL}/api/intelligence/analyze-prospect",
             json=payload,
-            timeout=30.0,
+            timeout=300.0,
         )
         if res.status_code == 200:
             return True, res.json()
