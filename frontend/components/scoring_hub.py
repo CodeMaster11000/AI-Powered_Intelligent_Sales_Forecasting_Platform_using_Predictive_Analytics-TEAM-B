@@ -193,7 +193,6 @@ def render_scoring_hub():
             st.markdown("<h5 style='margin: 0 0 8px 0; font-size: 14px; font-weight: 600;'>AI Company Intelligence & Fit</h5>", unsafe_allow_html=True)
             
             needs = insights.get("business_needs", "Assessing infrastructure scaling needs.")
-            opps = insights.get("opportunities", "Predictive qualification match identified.")
 
             st.markdown(
                 f"""
@@ -201,13 +200,115 @@ def render_scoring_hub():
                     <div style="font-size: 11px; font-weight: 600; color: #0F766E; text-transform: uppercase;">Business Needs & Friction</div>
                     <div style="font-size: 13px; margin-top: 2px;">{needs}</div>
                 </div>
-                <div style="background: rgba(125,125,125,0.06); padding: 10px 14px; border-radius: 6px; margin-bottom: 14px;">
-                    <div style="font-size: 11px; font-weight: 600; color: #0F766E; text-transform: uppercase;">Value Proposition Fit</div>
-                    <div style="font-size: 13px; margin-top: 2px;">{opps}</div>
-                </div>
                 """,
                 unsafe_allow_html=True,
             )
+
+            opportunities = insights.get("transformation_opportunities") or insights.get("opportunities") or []
+            st.markdown("**Value Proposition Fit**")
+            if isinstance(opportunities, list) and opportunities:
+                opportunity_columns = st.columns(min(len(opportunities), 2))
+                for index, opportunity in enumerate(opportunities):
+                    with opportunity_columns[index % len(opportunity_columns)]:
+                        if not isinstance(opportunity, dict):
+                            st.write(opportunity)
+                            continue
+
+                        detected = opportunity.get("detected", False)
+                        status_icon = "🟢" if detected else "⚪"
+                        confidence = opportunity.get("confidence")
+                        confidence_label = (
+                            f"{confidence * 100:.0f}% confidence"
+                            if isinstance(confidence, (int, float))
+                            else "Confidence not provided"
+                        )
+                        st.markdown(
+                            f"""
+                            <div style="background: rgba(125,125,125,0.06); padding: 10px 12px; border-radius: 6px; margin-bottom: 10px; min-height: 120px;">
+                                <div style="font-weight: 600;">{status_icon} {opportunity.get("opportunity_name", "Business opportunity")}</div>
+                                <div style="font-size: 12px; opacity: 0.8; margin-top: 4px;">
+                                    {opportunity.get("impact_level", "Medium")} impact · {confidence_label}
+                                </div>
+                                <div style="font-size: 13px; margin-top: 7px;">{opportunity.get("details", "")}</div>
+                                <div style="font-size: 11px; opacity: 0.75; margin-top: 7px;">
+                                    ROI timeline: {opportunity.get("estimated_roi_timeline", "Not provided")}
+                                </div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+            elif opportunities:
+                # Preserve compatibility with older rows containing a plain-text value.
+                st.write(opportunities)
+            else:
+                st.caption("No specific transformation opportunities were identified.")
+
+            # Render the same structured agent output shown by the intelligence engine.
+            st.markdown("<hr style='margin: 14px 0;'/>", unsafe_allow_html=True)
+            st.markdown(
+                "<h5 style='margin: 0 0 8px 0; font-size: 14px; font-weight: 600;'>Multi-Agent Analysis Output</h5>",
+                unsafe_allow_html=True,
+            )
+            recommendation = insights.get("strategic_recommendation")
+            if recommendation:
+                st.info(f"💡 Recommendation: {recommendation}")
+
+            summary_col1, summary_col2, summary_col3 = st.columns(3)
+            with summary_col1:
+                growth_label = "Active" if insights.get("high_growth_potential") else "Moderate"
+                st.metric("High Growth Signal", growth_label)
+            with summary_col2:
+                compatibility = insights.get("overall_tech_compatibility_score")
+                st.metric(
+                    "Tech Compatibility",
+                    f"{compatibility}%" if compatibility is not None else "N/A",
+                )
+            with summary_col3:
+                latency = insights.get("execution_latency_seconds")
+                st.metric(
+                    "Analysis Latency",
+                    f"{latency:.2f}s" if isinstance(latency, (int, float)) else "N/A",
+                )
+
+            domain_analysis = insights.get("industry_analysis")
+            if domain_analysis:
+                st.markdown("**Company Profiling**")
+                st.write(domain_analysis)
+
+            growth_indicators = insights.get("growth_indicators") or []
+            if growth_indicators:
+                st.markdown("**Growth Signals**")
+                for indicator in growth_indicators:
+                    st.markdown(f"- 📈 {indicator}")
+
+            with st.expander("Tech Alignment & Buying Committee", expanded=False):
+                tech_components = insights.get("tech_stack_components") or {}
+                if tech_components:
+                    st.markdown("**Tech Stack Components**")
+                    for category, technologies in tech_components.items():
+                        st.markdown(f"- **{category}:** {', '.join(technologies)}")
+
+                metrics = insights.get("tech_alignment_metrics") or insights.get("tech_alignment") or []
+                if metrics:
+                    st.markdown("**Alignment Metrics**")
+                    for metric in metrics:
+                        if isinstance(metric, dict):
+                            st.markdown(
+                                f"- **{metric.get('category', 'General')}:** "
+                                f"{metric.get('compatibility_score', 0)}% - "
+                                f"{metric.get('alignment_notes', '')}"
+                            )
+
+                decision_makers = insights.get("decision_makers") or []
+                if decision_makers:
+                    st.markdown("**Decision Makers**")
+                    for person in decision_makers:
+                        if isinstance(person, dict):
+                            st.markdown(
+                                f"- **{person.get('name', 'Unknown')}** "
+                                f"({person.get('role_title', 'Decision Maker')}): "
+                                f"{person.get('recommended_pitch_angle', '')}"
+                            )
 
             # Bottom Action Bar with Tab-Switch Synchronization
             act1, act2 = st.columns([1.5, 2.5])

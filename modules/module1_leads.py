@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from backend.database.models.leads import Lead
 from backend.database.models.users import User
-from backend.schema import BulkLeadImportRequest, BulkLeadImportResponse, LeadCreate
+from backend.schema import BulkLeadImportRequest, BulkLeadImportResponse, LeadCreate, LeadUpdate
 
 
 def seed_default_users(db: Session) -> list[User]:
@@ -55,6 +55,35 @@ def create_single_lead(db: Session, lead_in: LeadCreate) -> Lead:
     db.commit()
     db.refresh(db_lead)
     return db_lead
+
+
+def update_single_lead(db: Session, lead_id: int, lead_in: LeadUpdate) -> Lead:
+    """Updates a lead after ensuring its email remains unique."""
+    db_lead = db.get(Lead, lead_id)
+    if not db_lead:
+        raise LookupError(f"Lead {lead_id} not found.")
+
+    existing = db.execute(
+        select(Lead).where(Lead.email == lead_in.email, Lead.lead_id != lead_id)
+    ).scalar_one_or_none()
+    if existing:
+        raise ValueError(f"Lead with email '{lead_in.email}' already exists in database.")
+
+    for field, value in lead_in.model_dump().items():
+        setattr(db_lead, field, value)
+    db.commit()
+    db.refresh(db_lead)
+    return db_lead
+
+
+def delete_single_lead(db: Session, lead_id: int) -> None:
+    """Deletes a lead and its dependent intelligence and score records."""
+    db_lead = db.get(Lead, lead_id)
+    if not db_lead:
+        raise LookupError(f"Lead {lead_id} not found.")
+
+    db.delete(db_lead)
+    db.commit()
 
 
 def bulk_import_leads(db: Session, import_req: BulkLeadImportRequest) -> BulkLeadImportResponse:

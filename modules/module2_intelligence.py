@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from backend.database.models.leads import Lead
 from backend.database.models.company_insights import CompanyInsight
 from backend.database.models.lead_scores import LeadScore
+from backend.database.models.lead_analysis_runs import LeadAnalysisRun
 from backend.ai_agents.graph import (
     run_lead_intelligence_pipeline,
     get_agent_architecture_mermaid,
@@ -69,6 +70,27 @@ def analyze_and_store_lead_intelligence(db: Session, lead_id: int) -> Dict[str, 
         raise RuntimeError("Qualification agent did not return a valid score.")
     score = raw_score
     conversion_prob = Decimal(str(round(score * 0.85, 2)))
+
+    # Keep every structured agent field in a dedicated immutable run record.
+    analysis_run = LeadAnalysisRun(
+        lead_id=lead_id,
+        qualification_score=score,
+        high_growth_potential=result_state.get("high_growth_potential"),
+        funding_analysis=result_state.get("funding_analysis"),
+        overall_tech_compatibility_score=result_state.get("overall_tech_compatibility_score"),
+        industry_domain_analysis=result_state.get("industry_domain_analysis"),
+        business_needs_summary=result_state.get("business_needs_summary"),
+        strategic_recommendation=result_state.get("strategic_recommendation"),
+        growth_indicators=result_state.get("growth_indicators"),
+        tech_stack_components=result_state.get("tech_stack_components"),
+        transformation_opportunities=result_state.get("transformation_opportunities"),
+        tech_alignment_metrics=result_state.get("tech_alignment_metrics"),
+        decision_makers=result_state.get("decision_makers"),
+        execution_trace=result_state.get("execution_trace"),
+        errors=result_state.get("errors"),
+        execution_latency_seconds=result_state.get("execution_latency_seconds"),
+    )
+    db.add(analysis_run)
 
     # 1. Update or create CompanyInsight
     existing_insight = db.execute(
@@ -140,12 +162,58 @@ def analyze_and_store_lead_intelligence(db: Session, lead_id: int) -> Dict[str, 
         "transformation_opportunities": result_state.get("transformation_opportunities"),
         "tech_alignment_metrics": result_state.get("tech_alignment_metrics"),
         "decision_makers": result_state.get("decision_makers"),
+        "growth_indicators": result_state.get("growth_indicators"),
+        "tech_stack_components": result_state.get("tech_stack_components"),
+        "overall_tech_compatibility_score": result_state.get("overall_tech_compatibility_score"),
+        "funding_analysis": result_state.get("funding_analysis"),
+        "execution_trace": result_state.get("execution_trace"),
         "execution_latency_seconds": result_state.get("execution_latency_seconds"),
     }
 
 
 def get_lead_insights(db: Session, lead_id: int) -> Optional[Dict[str, Any]]:
-    """Retrieves existing intelligence insight record for a lead."""
+    """Retrieves the latest complete structured intelligence run for a lead."""
+    analysis_run = db.execute(
+        select(LeadAnalysisRun)
+        .where(LeadAnalysisRun.lead_id == lead_id)
+        .order_by(LeadAnalysisRun.generated_at.desc(), LeadAnalysisRun.analysis_id.desc())
+    ).scalars().first()
+
+    if analysis_run:
+        score = db.execute(
+            select(LeadScore)
+            .where(LeadScore.lead_id == lead_id)
+            .order_by(LeadScore.generated_at.desc())
+        ).scalars().first()
+        return {
+            "analysis_id": analysis_run.analysis_id,
+            "lead_id": analysis_run.lead_id,
+            "qualification_score": analysis_run.qualification_score,
+            "conversion_probability": float(score.conversion_probability) if score else None,
+            "high_growth_potential": analysis_run.high_growth_potential,
+            "funding_analysis": analysis_run.funding_analysis,
+            "overall_tech_compatibility_score": analysis_run.overall_tech_compatibility_score,
+            "business_needs": analysis_run.business_needs_summary,
+            "business_needs_summary": analysis_run.business_needs_summary,
+            "strategic_recommendation": analysis_run.strategic_recommendation,
+            "industry_analysis": analysis_run.industry_domain_analysis,
+            "industry_domain_analysis": analysis_run.industry_domain_analysis,
+            "opportunities": analysis_run.transformation_opportunities,
+            "transformation_opportunities": analysis_run.transformation_opportunities,
+            "growth_indicators": analysis_run.growth_indicators,
+            "tech_stack_components": analysis_run.tech_stack_components,
+            "tech_alignment": analysis_run.tech_alignment_metrics,
+            "tech_alignment_metrics": analysis_run.tech_alignment_metrics,
+            "decision_maker_summary": analysis_run.decision_makers,
+            "decision_makers": analysis_run.decision_makers,
+            "execution_trace": analysis_run.execution_trace,
+            "errors": analysis_run.errors,
+            "execution_latency_seconds": analysis_run.execution_latency_seconds,
+            "generated_at": str(analysis_run.generated_at),
+        }
+
+    # Backward-compatible read path for databases that have not been rescored
+    # since the structured analysis table was introduced.
     insight = db.execute(
         select(CompanyInsight)
         .where(CompanyInsight.lead_id == lead_id)
@@ -171,6 +239,14 @@ def get_lead_insights(db: Session, lead_id: int) -> Optional[Dict[str, Any]]:
         "growth_indicators": _safe_json_loads(insight.growth_indicators),
         "tech_alignment": _safe_json_loads(insight.tech_alignment),
         "decision_maker_summary": _safe_json_loads(insight.decision_maker_summary),
+        "strategic_recommendation": None,
+        "high_growth_potential": None,
+        "tech_stack_components": None,
+        "tech_alignment_metrics": _safe_json_loads(insight.tech_alignment),
+        "decision_makers": _safe_json_loads(insight.decision_maker_summary),
+        "execution_trace": None,
+        "errors": None,
+        "execution_latency_seconds": None,
         "generated_at": str(insight.generated_at),
     }
 
