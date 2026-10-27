@@ -65,9 +65,12 @@ def bulk_import_leads(db: Session, import_req: BulkLeadImportRequest) -> BulkLea
 
     # Pre-fetch existing emails to avoid n-query roundtrips
     incoming_emails = [lead.email.lower() for lead in import_req.leads]
-    existing_emails_set = set(
-        db.execute(select(Lead.email).where(Lead.email.in_(incoming_emails))).scalars().all()
-    )
+    existing_emails_set = {
+        email.lower()
+        for email in db.execute(
+            select(Lead.email).where(Lead.email.in_(incoming_emails))
+        ).scalars().all()
+    }
 
     imported_records: list[Lead] = []
     skipped_count = 0
