@@ -1,8 +1,11 @@
+from unittest.mock import Mock
+
 import pytest
 from fastapi.testclient import TestClient
 from backend.main import app
 from backend.ai_agents.outreach_agent import generate_personalized_outreach
 from modules.module3_outreach import generate_personalized_email
+from backend.main import SaveDraftRequest, save_outreach_draft
 
 client = TestClient(app)
 
@@ -107,3 +110,31 @@ def test_api_llm_providers_endpoint():
     assert "openai" in data
     assert "grok" in data
     assert "ollama" in data
+
+
+def test_save_outreach_draft_persists_record():
+    db = Mock()
+    lead = Mock(lead_id=7, company_name="Example Corp")
+    db.get.return_value = lead
+
+    def refresh_draft(draft):
+        draft.id = 42
+
+    db.refresh.side_effect = refresh_draft
+    result = save_outreach_draft(
+        SaveDraftRequest(
+            lead_id=7,
+            subject="A useful subject",
+            body="A personalized message.",
+        ),
+        db,
+    )
+
+    saved_draft = db.add.call_args.args[0]
+    assert saved_draft.lead_id == 7
+    assert saved_draft.subject == "A useful subject"
+    assert saved_draft.body == "A personalized message."
+    assert saved_draft.status == "draft"
+    assert result["draft_id"] == 42
+    db.commit.assert_called_once_with()
+    db.refresh.assert_called_once_with(saved_draft)

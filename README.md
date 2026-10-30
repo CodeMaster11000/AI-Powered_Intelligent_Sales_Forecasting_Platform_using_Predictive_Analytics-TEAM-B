@@ -53,7 +53,7 @@ streamlit run frontend/app.py           # terminal 2 -> http://localhost:8501
 | # | Weeks | Focus | Checklist |
 |---|-------|-------|-----------|
 | 1 | 1-2 | Lead management and intelligence engine | [docs/milestones/milestone-1.md](docs/milestones/milestone-1.md) |
-| 2 | 3-4 | Outreach generation and lead scoring | |
+| 2 | 3-4 | Outreach generation and lead scoring | [Backend report](docs/milestones/milestone-2-backend-report.md), [Frontend report](docs/milestones/milestone-2-frontend-report.md) |
 | 3 | 5-6 | CRM integration and conversation intelligence | |
 | 4 | 7-8 | Dashboard, automation and deployment | |
 

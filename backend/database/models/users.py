@@ -7,6 +7,7 @@ from backend.database.database import Base
 
 if TYPE_CHECKING:
     from backend.database.models.leads import Lead
+    from backend.database.models.outreach_emails import OutreachEmail
 ROLES = ("Sales Representative", "BDR", "Sales Manager", "RevOps")
 
 class User(Base):
@@ -29,4 +30,7 @@ class User(Base):
     )
 
     leads: Mapped[list["Lead"]] = relationship(back_populates="owner", passive_deletes=True)
+    outreach_emails: Mapped[list["OutreachEmail"]] = relationship(
+        back_populates="user", passive_deletes=True
+    )
     #analytics: Mapped[list["SalesAnalytics"]] = relationship(back_populates="user", passive_deletes=True)

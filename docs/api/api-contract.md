@@ -537,8 +537,7 @@ The lead must exist (`404`). Incomplete or unavailable AI output returns
 
 ### `POST /api/outreach/save-draft`
 
-Acknowledges a draft save. It currently does not persist the subject/body in a
-dedicated outreach table.
+Persists a draft in the `outreach_emails` table.
 
 ```json
 {
@@ -554,6 +553,7 @@ Response:
 ```json
 {
   "status": "saved",
+  "draft_id": 12,
   "lead_id": 101,
   "company_name": "Acme Cloud",
   "subject": "Scaling Acme Cloud"

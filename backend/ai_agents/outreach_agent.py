@@ -4,6 +4,9 @@ from typing import Dict, Any, Optional
 from backend.ai_agents.llm_client import llm_client
 from backend.ai_agents.prompts import OUTREACH_AGENT_SYSTEM_PROMPT
 
+logger = logging.getLogger(__name__)
+
+
 def generate_personalized_outreach(
     lead_data: Dict[str, Any],
     insight_data: Optional[Dict[str, Any]] = None,

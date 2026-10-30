@@ -36,15 +36,27 @@ def upgrade() -> None:
         sa.Column("execution_trace", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column("errors", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column("execution_latency_seconds", sa.Float(), nullable=True),
-        sa.Column("generated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "generated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["lead_id"], ["leads.lead_id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("analysis_id"),
     )
     op.create_index("ix_lead_analysis_runs_lead_id", "lead_analysis_runs", ["lead_id"])
-    op.create_index("ix_lead_analysis_runs_generated_at", "lead_analysis_runs", ["generated_at"])
+    op.create_index(
+        "ix_lead_analysis_runs_generated_at",
+        "lead_analysis_runs",
+        ["generated_at"],
+    )
 
 
 def downgrade() -> None:
-    op.drop_index("ix_lead_analysis_runs_generated_at", table_name="lead_analysis_runs")
+    op.drop_index(
+        "ix_lead_analysis_runs_generated_at",
+        table_name="lead_analysis_runs",
+    )
     op.drop_index("ix_lead_analysis_runs_lead_id", table_name="lead_analysis_runs")
     op.drop_table("lead_analysis_runs")
