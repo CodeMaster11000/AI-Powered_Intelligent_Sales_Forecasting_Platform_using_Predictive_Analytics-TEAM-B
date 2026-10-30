@@ -30,6 +30,10 @@ class LeadCreate(LeadBase):
     pass
 
 
+class LeadUpdate(LeadBase):
+    pass
+
+
 class LeadResponse(LeadBase):
     model_config = ConfigDict(from_attributes=True)
 
@@ -86,15 +90,29 @@ class ProspectAnalysisRequest(BaseModel):
 
 class CompanyInsightResponse(BaseModel):
     insight_id: Optional[int] = None
+    analysis_id: Optional[int] = None
     lead_id: int
     qualification_score: Optional[int] = None
     conversion_probability: Optional[float] = None
+    high_growth_potential: Optional[bool] = None
+    funding_analysis: Optional[str] = None
+    overall_tech_compatibility_score: Optional[int] = None
     business_needs: Optional[str] = None
+    business_needs_summary: Optional[str] = None
+    strategic_recommendation: Optional[str] = None
     opportunities: Optional[Any] = None
+    transformation_opportunities: Optional[Any] = None
     industry_analysis: Optional[str] = None
+    industry_domain_analysis: Optional[str] = None
     growth_indicators: Optional[Any] = None
+    tech_stack_components: Optional[Any] = None
     tech_alignment: Optional[Any] = None
+    tech_alignment_metrics: Optional[Any] = None
     decision_maker_summary: Optional[Any] = None
+    decision_makers: Optional[Any] = None
+    execution_trace: Optional[Any] = None
+    errors: Optional[Any] = None
+    execution_latency_seconds: Optional[float] = None
     generated_at: Optional[str] = None
 
 
@@ -105,12 +123,18 @@ class LeadAnalysisResponse(BaseModel):
     conversion_probability: float
     lead_status: str
     high_growth_potential: Optional[bool] = None
+    funding_analysis: Optional[str] = None
+    overall_tech_compatibility_score: Optional[int] = None
     business_needs: Optional[str] = None
     strategic_recommendation: Optional[str] = None
     industry_analysis: Optional[str] = None
+    growth_indicators: Optional[List[str]] = None
+    tech_stack_components: Optional[Dict[str, List[str]]] = None
     transformation_opportunities: Optional[List[Dict[str, Any]]] = None
     tech_alignment_metrics: Optional[List[Dict[str, Any]]] = None
     decision_makers: Optional[List[Dict[str, Any]]] = None
+    execution_trace: Optional[List[str]] = None
+    errors: Optional[List[str]] = None
     execution_latency_seconds: Optional[float] = None
 
 

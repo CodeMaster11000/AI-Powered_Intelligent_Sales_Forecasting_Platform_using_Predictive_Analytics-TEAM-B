@@ -52,6 +52,34 @@ def create_lead_api(payload: dict) -> tuple[bool, dict | str]:
         return False, f"Request failed: {e}"
 
 
+def update_lead_api(lead_id: int, payload: dict) -> tuple[bool, dict | str]:
+    """Updates an existing lead and returns the refreshed record."""
+    try:
+        res = requests.put(f"{API_BASE_URL}/api/leads/{lead_id}", json=payload, timeout=4.0)
+        if res.status_code == 200:
+            return True, res.json()
+        error_detail = res.json().get("detail", res.text)
+        return False, error_detail
+    except requests.exceptions.ConnectionError:
+        return False, "Backend is offline. Start FastAPI backend with 'uvicorn backend.main:app --reload'."
+    except requests.RequestException as e:
+        return False, f"Request failed: {e}"
+
+
+def delete_lead_api(lead_id: int) -> tuple[bool, str]:
+    """Deletes an existing lead and its dependent intelligence records."""
+    try:
+        res = requests.delete(f"{API_BASE_URL}/api/leads/{lead_id}", timeout=4.0)
+        if res.status_code == 204:
+            return True, ""
+        error_detail = res.json().get("detail", res.text)
+        return False, error_detail
+    except requests.exceptions.ConnectionError:
+        return False, "Backend is offline. Start FastAPI backend with 'uvicorn backend.main:app --reload'."
+    except requests.RequestException as e:
+        return False, f"Request failed: {e}"
+
+
 def bulk_import_api(leads: list[dict], skip_duplicates: bool = True) -> tuple[bool, dict | str]:
     """Imports and validates a batch of prospect records."""
     try:

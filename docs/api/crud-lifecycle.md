@@ -12,7 +12,9 @@ create one or many leads
         v
 list/search leads and inspect pipeline statistics
         |
-        +--> analyze a lead -> persist insight and score -> optionally promote to Qualified
+        +--> update a lead or delete it (including dependent AI records)
+        |
+        +--> analyze a lead -> persist complete structured run, insight, and score -> optionally promote to Qualified
         |
         +--> read the latest insight or complete scoring dossier
 ```
@@ -60,8 +62,8 @@ Unknown lead or insight records return `404` on the resource-specific routes.
    transformation opportunities.
 2. Qualification agent produces a 0-100 qualification score, technology
    alignment, personas, business needs, and a recommendation.
-3. The service upserts the latest `company_insights` record and `lead_scores`
-   record.
+3. The service stores the complete structured output in `lead_analysis_runs`,
+   and upserts the compatibility `company_insights` and `lead_scores` records.
 4. A lead in `New Leads` is promoted to `Qualified` when its score is at least
    70.
 
@@ -71,18 +73,18 @@ provider or incomplete-output failures return `503`.
 `POST /api/intelligence/analyze-prospect` performs the same analysis without
 creating or modifying a database lead.
 
-## Update and delete status
+## Update and delete
 
-Milestone 1 does **not** currently expose `PUT`, `PATCH`, or `DELETE` lead
-routes. The existing API supports creation, bulk ingestion, reads, and
-analysis-driven status promotion only. Do not build a client integration
-against update/delete behavior until those routes and their migration-safe
-semantics are implemented.
+`PUT /api/leads/{lead_id}` accepts a complete `LeadUpdate` payload and returns
+the updated lead. It preserves email uniqueness while Pydantic and database
+constraints validate email, status, and source values. Unknown leads return
+`404`, and a duplicate email returns `400`.
 
-The database model does support lifecycle fields (`lead_status`,
-`updated_at`) and cascading child records for future update/delete work. Any
-future mutation endpoint must preserve email uniqueness, status/source
-constraints, timestamps, and the score/insight relationships.
+`DELETE /api/leads/{lead_id}` returns `204 No Content`. Deleting a lead also
+cascades its company insight and score records. Unknown leads return `404`.
+
+The Recently Ingested Leads table exposes both operations through its
+**Manage lead** controls.
 
 ## Persistence relationships
 
@@ -91,5 +93,8 @@ constraints, timestamps, and the score/insight relationships.
 - `lead_scores` stores the current persisted score in the present
   implementation; re-analysis updates the latest row rather than exposing a
   score-history API.
+- `lead_analysis_runs` stores each complete multi-agent output as structured
+  fields and JSONB values, including opportunities, growth indicators, tech
+  components, alignment metrics, personas, recommendation, trace, and
+  execution metadata. Predictive scoring reads the latest run.
 - Deleting a lead at the database level cascades its insight and score rows.
-

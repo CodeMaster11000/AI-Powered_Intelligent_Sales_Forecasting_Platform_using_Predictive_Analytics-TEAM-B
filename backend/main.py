@@ -1,4 +1,4 @@
-from fastapi import Depends, FastAPI, HTTPException, Query, status
+from fastapi import Depends, FastAPI, HTTPException, Query, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Literal
@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from backend.database.database import get_db
 from backend.database.models.company_insights import CompanyInsight
 from backend.database.models.lead_scores import LeadScore
+from backend.database.models.lead_analysis_runs import LeadAnalysisRun
 from backend.database.models.leads import Lead
 from backend.database.models.outreach_emails import OutreachEmail
 from backend.database.models.users import User
@@ -15,6 +16,7 @@ from backend.schema import (
     BulkLeadImportRequest,
     BulkLeadImportResponse,
     LeadCreate,
+    LeadUpdate,
     LeadResponse,
     PipelineStatsResponse,
     UserResponse,
@@ -26,9 +28,11 @@ from backend.schema import (
 from modules.module1_leads import (
     bulk_import_leads,
     create_single_lead,
+    delete_single_lead,
     get_pipeline_stats,
     list_leads,
     seed_default_users,
+    update_single_lead,
 )
 from modules.module2_intelligence import (
     analyze_lead_intelligence,
@@ -73,6 +77,25 @@ def create_lead(lead_in: LeadCreate, db: Session = Depends(get_db)):
         return create_single_lead(db, lead_in)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.put("/api/leads/{lead_id}", response_model=LeadResponse, tags=["Leads"])
+def update_lead(lead_id: int, lead_in: LeadUpdate, db: Session = Depends(get_db)):
+    try:
+        return update_single_lead(db, lead_id, lead_in)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.delete("/api/leads/{lead_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Leads"])
+def delete_lead(lead_id: int, db: Session = Depends(get_db)):
+    try:
+        delete_single_lead(db, lead_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @app.post("/api/leads/bulk", response_model=BulkLeadImportResponse, status_code=status.HTTP_201_CREATED, tags=["Leads"])
@@ -196,7 +219,13 @@ def get_lead_dossier(lead_id: int, db: Session = Depends(get_db)):
         .order_by(CompanyInsight.generated_at.desc())
     ).scalars().first()
 
-    if not score_obj or not insight_obj:
+    analysis_run = db.execute(
+        select(LeadAnalysisRun)
+        .where(LeadAnalysisRun.lead_id == lead_id)
+        .order_by(LeadAnalysisRun.generated_at.desc(), LeadAnalysisRun.analysis_id.desc())
+    ).scalars().first()
+
+    if not score_obj or not insight_obj or not analysis_run:
         try:
             analyze_and_store_lead_intelligence(db, lead_id)
         except ValueError as exc:

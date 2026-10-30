@@ -3,9 +3,13 @@ import pandas as pd
 import streamlit as st
 
 try:
-    from frontend.utils.api_client import fetch_leads_api
+    from frontend.utils.api_client import delete_lead_api, fetch_leads_api, update_lead_api
 except ModuleNotFoundError:
-    from utils.api_client import fetch_leads_api
+    from utils.api_client import delete_lead_api, fetch_leads_api, update_lead_api
+
+
+LEAD_STATUSES = ["New Leads", "Qualified", "Proposal", "Negotiation", "Closed Won"]
+SOURCES = ["Sales Entry", "LinkedIn", "Website Form", "CRM", "CSV"]
 
 
 def render_staging_feed():
@@ -146,3 +150,94 @@ def render_staging_feed():
             hide_index=True,
             column_config=column_configs,
         )
+
+        # Actions stay beside the table so every persisted row has an explicit target.
+        lead_options = {
+            f"{record.get('company_name', 'Unnamed company')} (ID {record['lead_id']})": record
+            for record in records
+            if record.get("lead_id") is not None
+        }
+        if not lead_options:
+            return
+
+        st.markdown("#### Manage lead")
+        selected_label = st.selectbox(
+            "Select a lead to edit or delete",
+            options=list(lead_options),
+            label_visibility="collapsed",
+        )
+        selected = lead_options[selected_label]
+        selected_id = int(selected["lead_id"])
+
+        with st.form(f"edit_lead_form_{selected_id}"):
+            edit_left, edit_middle, edit_right = st.columns(3)
+            with edit_left:
+                edit_company = st.text_input("Company name *", value=selected.get("company_name") or "")
+                edit_contact = st.text_input("Contact name", value=selected.get("contact_name") or "")
+                edit_title = st.text_input("Contact title", value=selected.get("contact_title") or "")
+                edit_email = st.text_input("Email *", value=selected.get("email") or "")
+                edit_phone = st.text_input("Phone", value=selected.get("phone") or "")
+            with edit_middle:
+                edit_industry = st.text_input("Industry", value=selected.get("industry") or "")
+                edit_company_size = st.text_input("Company size", value=selected.get("company_size") or "")
+                edit_revenue = st.text_input("Annual revenue", value=selected.get("annual_revenue") or "")
+                edit_location = st.text_input("Location", value=selected.get("location") or "")
+                edit_source = st.selectbox(
+                    "Source",
+                    options=SOURCES,
+                    index=SOURCES.index(selected["source"]) if selected.get("source") in SOURCES else 0,
+                )
+            with edit_right:
+                edit_status = st.selectbox(
+                    "Pipeline status",
+                    options=LEAD_STATUSES,
+                    index=LEAD_STATUSES.index(selected["lead_status"])
+                    if selected.get("lead_status") in LEAD_STATUSES else 0,
+                )
+                edit_funding_stage = st.text_input("Funding stage", value=selected.get("funding_stage") or "")
+                edit_funding_raised = st.text_input("Funding raised", value=selected.get("funding_raised") or "")
+                existing_tech = selected.get("tech_stack") or []
+                if not isinstance(existing_tech, list):
+                    existing_tech = [item.strip() for item in str(existing_tech).split(",") if item.strip()]
+                edit_tech_stack = st.text_input(
+                    "Tech stack (comma-separated)",
+                    value=", ".join(existing_tech),
+                )
+                edit_owner = selected.get("owner_user_id")
+
+            if st.form_submit_button("Save changes", type="primary"):
+                if not edit_company.strip() or not edit_email.strip():
+                    st.error("Company name and email are required.")
+                else:
+                    payload = {
+                        "company_name": edit_company.strip(),
+                        "contact_name": edit_contact.strip() or None,
+                        "contact_title": edit_title.strip() or None,
+                        "email": edit_email.strip().lower(),
+                        "phone": edit_phone.strip() or None,
+                        "industry": edit_industry.strip() or None,
+                        "company_size": edit_company_size.strip() or None,
+                        "annual_revenue": edit_revenue.strip() or None,
+                        "location": edit_location.strip() or None,
+                        "source": edit_source,
+                        "lead_status": edit_status,
+                        "funding_stage": edit_funding_stage.strip() or None,
+                        "funding_raised": edit_funding_raised.strip() or None,
+                        "tech_stack": [item.strip() for item in edit_tech_stack.split(",") if item.strip()] or None,
+                        "owner_user_id": edit_owner,
+                    }
+                    success, result = update_lead_api(selected_id, payload)
+                    if success:
+                        st.toast(f"Updated {payload['company_name']}.", icon="✅")
+                        st.rerun()
+                    else:
+                        st.error(f"Unable to update lead: {result}")
+
+        confirm_delete = st.checkbox("I understand this permanently deletes the selected lead and its AI data.")
+        if st.button("Delete selected lead", type="secondary", disabled=not confirm_delete):
+            success, result = delete_lead_api(selected_id)
+            if success:
+                st.toast(f"Deleted {selected.get('company_name', 'lead')}.", icon="🗑️")
+                st.rerun()
+            else:
+                st.error(f"Unable to delete lead: {result}")
