@@ -1,6 +1,7 @@
 from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from typing import Literal
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -8,6 +9,7 @@ from backend.database.database import get_db
 from backend.database.models.company_insights import CompanyInsight
 from backend.database.models.lead_scores import LeadScore
 from backend.database.models.leads import Lead
+from backend.database.models.outreach_emails import OutreachEmail
 from backend.database.models.users import User
 from backend.schema import (
     BulkLeadImportRequest,
@@ -278,9 +280,9 @@ class OutreachRequest(BaseModel):
 
 class SaveDraftRequest(BaseModel):
     lead_id: int
-    subject: str
-    body: str
-    status: str = "draft"
+    subject: str = Field(..., min_length=1)
+    body: str = Field(..., min_length=1)
+    status: Literal["draft"] = "draft"
 
 
 class SendOutreachRequest(BaseModel):
@@ -328,8 +330,18 @@ def save_outreach_draft(req: SaveDraftRequest, db: Session = Depends(get_db)):
     lead = db.get(Lead, req.lead_id)
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
+    draft = OutreachEmail(
+        lead_id=lead.lead_id,
+        subject=req.subject,
+        body=req.body,
+        status=req.status,
+    )
+    db.add(draft)
+    db.commit()
+    db.refresh(draft)
     return {
         "status": "saved",
+        "draft_id": draft.id,
         "lead_id": req.lead_id,
         "company_name": lead.company_name,
         "subject": req.subject,
