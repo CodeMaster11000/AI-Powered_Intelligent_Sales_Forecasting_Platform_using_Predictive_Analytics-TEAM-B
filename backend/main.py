@@ -42,6 +42,11 @@ from modules.module2_intelligence import (
     get_architecture_diagram,
 )
 from modules.module3_outreach import generate_personalized_email
+from modules.module4_scoring import (
+    calculate_predictive_score,
+    generate_next_best_action,
+    score_and_recommend,
+)
 
 app = FastAPI(title="SalesGenie AI Core API", version="1.0.0")
 
@@ -243,10 +248,28 @@ def get_lead_dossier(lead_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=503, detail="AI analysis did not produce a complete dossier.")
 
     score_value = score_obj.lead_score
+    scoring_calc = calculate_predictive_score(
+        {
+            "lead_id": lead.lead_id,
+            "company_name": lead.company_name,
+            "contact_name": lead.contact_name,
+            "contact_title": lead.contact_title,
+            "email": lead.email,
+            "phone": lead.phone,
+            "source": getattr(lead, "source", "CSV"),
+            "company_size": lead.company_size,
+            "annual_revenue": lead.annual_revenue,
+            "funding_stage": lead.funding_stage,
+            "location": lead.location,
+            "tech_stack": lead.tech_stack,
+        },
+        insight_res,
+    )
     score_data = {
         "score": score_value,
         "conversion_probability": float(score_obj.conversion_probability),
         "priority": "hot" if score_value >= 75 else ("warm" if score_value >= 40 else "cold"),
+        "factors": scoring_calc.get("factors", {}),
     }
 
     return {
@@ -272,6 +295,25 @@ def rescore_lead(lead_id: int, db: Session = Depends(get_db)):
     except Exception:
         raise HTTPException(status_code=503, detail="AI analysis is currently unavailable.")
 
+    lead = db.get(Lead, lead_id)
+    scoring_calc = calculate_predictive_score(
+        {
+            "lead_id": lead.lead_id if lead else lead_id,
+            "company_name": lead.company_name if lead else "Target",
+            "contact_name": lead.contact_name if lead else None,
+            "contact_title": lead.contact_title if lead else None,
+            "email": lead.email if lead else "",
+            "phone": lead.phone if lead else None,
+            "source": getattr(lead, "source", "CSV") if lead else "CSV",
+            "company_size": lead.company_size if lead else None,
+            "annual_revenue": lead.annual_revenue if lead else None,
+            "funding_stage": lead.funding_stage if lead else None,
+            "location": lead.location if lead else None,
+            "tech_stack": lead.tech_stack if lead else [],
+        },
+        analysis,
+    )
+
     return {
         "scoring": {
             "score": analysis["qualification_score"],
@@ -281,6 +323,7 @@ def rescore_lead(lead_id: int, db: Session = Depends(get_db)):
                 else "warm" if analysis["qualification_score"] >= 40
                 else "cold"
             ),
+            "factors": scoring_calc.get("factors", {}),
         },
         "insights": analysis,
     }
