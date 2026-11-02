@@ -164,3 +164,92 @@ def _as_text(value: Any) -> str:
     if isinstance(value, list):
         return ", ".join(str(item) for item in value)
     return str(value or "")
+
+
+def calculate_predictive_score(
+    lead_data: dict[str, Any],
+    insight_data: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Return the legacy dictionary contract used by the scoring UI."""
+    insight_data = insight_data or {}
+    tech_stack = _as_text(lead_data.get("tech_stack")).lower()
+    size = _as_text(lead_data.get("company_size")).lower()
+    revenue = _as_text(lead_data.get("annual_revenue")).lower()
+    funding = _as_text(lead_data.get("funding_stage")).lower()
+
+    fit = 10 if any(value in size for value in ("enterprise", "1000+", "500-1000", "large")) else 5
+    fit += 10 if any(value in revenue for value in ("50m", "100m", "500m", "billion")) else 5
+    fit += round(min(100, max(0, float(insight_data.get("overall_tech_compatibility_score", 50)))) / 10)
+    fit = min(30, fit)
+
+    intent = 10 if any(value in funding for value in ("series c", "series d", "ipo", "growth")) else 7 if "series" in funding else 4
+    intent += 8 if insight_data.get("high_growth_potential") else 5 if insight_data.get("growth_indicators") else 2
+    opportunities = insight_data.get("transformation_opportunities") or insight_data.get("opportunities")
+    intent += 7 if opportunities else 5 if insight_data.get("business_needs") else 2
+    intent = min(25, intent)
+
+    title = _as_text(lead_data.get("contact_title")).lower()
+    decision = 15 if any(value in title for value in ("ceo", "cto", "cio", "chief", "president", "vp", "founder")) else 11 if any(value in title for value in ("director", "head", "lead")) else 5
+    decision += 10 if insight_data.get("decision_makers") else 6 if lead_data.get("contact_name") else 3
+    decision = min(25, decision)
+
+    source = _as_text(lead_data.get("source")).lower()
+    engagement = 10 if any(value in source for value in ("website form", "crm", "inbound")) else 7 if any(value in source for value in ("linkedin", "sales entry")) else 5
+    engagement += sum(1 for key in ("email", "phone", "location") if lead_data.get(key)) * 3
+    engagement = min(20, engagement)
+
+    score = min(100, fit + intent + decision + engagement)
+    probability = round(100 / (1 + __import__("math").exp(-0.06 * (score - 50))), 2)
+    priority = "hot" if score >= 75 else "warm" if score >= 40 else "cold"
+    return {
+        "score": score,
+        "conversion_probability": probability,
+        "priority": priority,
+        "factors": {
+            "fit": {"score": fit, "max": 30},
+            "intent": {"score": intent, "max": 25},
+            "decision": {"score": decision, "max": 25},
+            "engagement": {"score": engagement, "max": 20},
+        },
+    }
+
+
+def generate_next_best_action(
+    score_data: dict[str, Any],
+    lead_data: dict[str, Any],
+    insight_data: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Generate an actionable follow-up recommendation for a scored lead."""
+    insight_data = insight_data or {}
+    priority = score_data.get("priority", "warm")
+    timing = {"hot": "Immediate (< 24 Hours)", "warm": "2 - 3 Business Days"}.get(
+        priority, "Nurture Track (7 - 14 Days)"
+    )
+    urgency = {"hot": "High Priority", "warm": "Standard Pipeline"}.get(
+        priority, "Low Friction Nurture"
+    )
+    channels = ["LinkedIn InMail / Social Touch"]
+    if lead_data.get("email"):
+        channels.insert(0, "Hyper-Personalized Cold Email")
+    if lead_data.get("phone") and priority in {"hot", "warm"}:
+        channels.insert(1, "Direct Executive Phone Call")
+    opportunities = insight_data.get("transformation_opportunities") or []
+    opportunity = opportunities[0].get("opportunity_name") if opportunities and isinstance(opportunities[0], dict) else "predictive sales qualification"
+    return {
+        "urgency": urgency,
+        "follow_up_timing": timing,
+        "channel_mix": channels,
+        "content_strategy": f"Focus conversation on {opportunity} with quantified ROI benchmarks.",
+        "recommended_action": f"Schedule a discovery session with {lead_data.get('contact_name', 'the primary contact')}.",
+    }
+
+
+def score_and_recommend(
+    lead_data: dict[str, Any],
+    insight_data: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    scoring = calculate_predictive_score(lead_data, insight_data)
+    return {
+        "scoring": scoring,
+        "recommendations": generate_next_best_action(scoring, lead_data, insight_data),
+    }
