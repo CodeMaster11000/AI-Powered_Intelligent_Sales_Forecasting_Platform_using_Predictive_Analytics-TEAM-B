@@ -5,4 +5,11 @@ from backend.database.models.leads import Lead
 from backend.database.models.outreach_emails import OutreachEmail
 from backend.database.models.users import User
 
-__all__ = ["CompanyInsight", "LeadScore", "Lead", "OutreachEmail", "User"]
+__all__ = [
+    "CompanyInsight",
+    "LeadScore",
+    "LeadAnalysisRun",
+    "Lead",
+    "OutreachEmail",
+    "User",
+]

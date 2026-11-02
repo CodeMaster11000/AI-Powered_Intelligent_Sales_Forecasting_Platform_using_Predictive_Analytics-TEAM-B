@@ -20,6 +20,7 @@ from backend.ai_agents.graph import (
     run_lead_intelligence_pipeline,
     get_agent_architecture_mermaid,
 )
+from modules.module4_scoring import calculate_lead_score
 
 
 def analyze_lead_intelligence(prospect_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -69,7 +70,9 @@ def analyze_and_store_lead_intelligence(db: Session, lead_id: int) -> Dict[str, 
     if not isinstance(raw_score, int) or not 0 <= raw_score <= 100:
         raise RuntimeError("Qualification agent did not return a valid score.")
     score = raw_score
-    conversion_prob = Decimal(str(round(score * 0.85, 2)))
+    scoring = calculate_lead_score(lead, result_state)
+    score = scoring.lead_score
+    conversion_prob = Decimal(str(scoring.conversion_probability))
 
     # Keep every structured agent field in a dedicated immutable run record.
     analysis_run = LeadAnalysisRun(
@@ -140,8 +143,19 @@ def analyze_and_store_lead_intelligence(db: Session, lead_id: int) -> Dict[str, 
             lead_id=lead_id,
             lead_score=score,
             conversion_probability=conversion_prob,
+            engagement_score=scoring.engagement_score,
+            fit_score=scoring.fit_score,
+            intent_score=scoring.intent_score,
+            decision_readiness_score=scoring.decision_readiness_score,
+            scoring_factors=scoring.factors,
         )
         db.add(new_score)
+    if existing_score:
+        existing_score.engagement_score = scoring.engagement_score
+        existing_score.fit_score = scoring.fit_score
+        existing_score.intent_score = scoring.intent_score
+        existing_score.decision_readiness_score = scoring.decision_readiness_score
+        existing_score.scoring_factors = scoring.factors
 
     # 3. Lifecycle stage tracking: promote to Qualified if score >= 70
     if score >= 70 and lead.lead_status == "New Leads":
@@ -154,6 +168,11 @@ def analyze_and_store_lead_intelligence(db: Session, lead_id: int) -> Dict[str, 
         "company_name": lead.company_name,
         "qualification_score": score,
         "conversion_probability": float(conversion_prob),
+        "engagement_score": scoring.engagement_score,
+        "fit_score": scoring.fit_score,
+        "intent_score": scoring.intent_score,
+        "decision_readiness_score": scoring.decision_readiness_score,
+        "scoring_factors": scoring.factors,
         "lead_status": lead.lead_status,
         "high_growth_potential": result_state.get("high_growth_potential"),
         "business_needs": result_state.get("business_needs_summary"),

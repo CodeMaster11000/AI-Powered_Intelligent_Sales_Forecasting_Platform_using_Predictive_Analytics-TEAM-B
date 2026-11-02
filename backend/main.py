@@ -194,6 +194,12 @@ def get_scoring_queue(db: Session = Depends(get_db)):
             "industry": lead.industry or "Technology",
             "score": score_val,
             "conversion_probability": prob,
+            "engagement_score": latest_score.engagement_score if latest_score else None,
+            "fit_score": latest_score.fit_score if latest_score else None,
+            "intent_score": latest_score.intent_score if latest_score else None,
+            "decision_readiness_score": (
+                latest_score.decision_readiness_score if latest_score else None
+            ),
             "priority": priority,
         })
 
@@ -246,6 +252,12 @@ def get_lead_dossier(lead_id: int, db: Session = Depends(get_db)):
     score_data = {
         "score": score_value,
         "conversion_probability": float(score_obj.conversion_probability),
+        "engagement_score": score_obj.engagement_score,
+        "fit_score": score_obj.fit_score,
+        "intent_score": score_obj.intent_score,
+        "decision_readiness_score": score_obj.decision_readiness_score,
+        "scoring_version": score_obj.scoring_version,
+        "scoring_factors": score_obj.scoring_factors,
         "priority": "hot" if score_value >= 75 else ("warm" if score_value >= 40 else "cold"),
     }
 

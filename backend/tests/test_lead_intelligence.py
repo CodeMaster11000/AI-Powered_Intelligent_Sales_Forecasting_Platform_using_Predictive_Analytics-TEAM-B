@@ -6,6 +6,7 @@ from backend.ai_agents.graph import (
     intelligence_graph,
 )
 from modules.module2_intelligence import analyze_lead_intelligence
+from modules.module4_scoring import calculate_lead_score
 
 
 def test_langgraph_pipeline_compilation():
@@ -108,3 +109,48 @@ def test_mermaid_architecture_diagram():
     assert "flowchart TD" in diagram
     assert "Research Agent Node" in diagram
     assert "Qualification Agent Node" in diagram
+
+
+def test_module4_score_uses_four_explainable_dimensions():
+    class Lead:
+        lead_status = "Qualified"
+        source = "Website Form"
+        contact_name = "Avery Chen"
+        contact_title = "VP Revenue"
+        email = "avery@example.com"
+        company_name = "Example Cloud"
+        industry = "SaaS"
+        company_size = "250-500 employees"
+        annual_revenue = "$20M"
+        funding_stage = "Series B"
+        tech_stack = ["AWS", "Kubernetes", "Python"]
+        owner_user_id = 1
+
+    result = calculate_lead_score(
+        Lead(),
+        {
+            "overall_tech_compatibility_score": 90,
+            "high_growth_potential": True,
+            "business_needs_summary": "Improve forecast accuracy",
+            "transformation_opportunities": [{"opportunity_name": "Automation"}],
+            "decision_makers": [{"role_title": "VP Revenue"}],
+        },
+    )
+
+    assert 0 <= result.lead_score <= 100
+    assert 0 <= result.conversion_probability <= 100
+    assert all(
+        0 <= value <= 100
+        for value in (
+            result.engagement_score,
+            result.fit_score,
+            result.intent_score,
+            result.decision_readiness_score,
+        )
+    )
+    assert set(result.factors) == {
+        "engagement",
+        "fit",
+        "intent",
+        "decision_readiness",
+    }
