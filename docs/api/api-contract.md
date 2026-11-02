@@ -60,8 +60,9 @@ CRM | Website Form | LinkedIn | Sales Entry | CSV
 ```
 
 Scores are integers from `0` to `100`. Conversion probability is represented
-as a number from `0` to `100` (the current intelligence implementation derives
-it as `qualification_score * 0.85`).
+as a number from `0` to `100`. Module 4 calculates the total from engagement
+(20%), fit (30%), intent (30%), and decision readiness (20%), then derives
+conversion probability as `lead_score * 0.85`, capped to `0..100`.
 
 ## 3. Endpoint index
 
@@ -80,7 +81,7 @@ it as `qualification_score * 0.85`).
 | `POST` | `/api/leads/batch-analyze` | Lead Intelligence | Analyze selected leads | `200` |
 | `POST` | `/api/intelligence/analyze-prospect` | Lead Intelligence | Analyze a prospect without saving a lead | `200` |
 | `GET` | `/api/intelligence/architecture` | Lead Intelligence | Return LangGraph topology | `200` |
-| `GET` | `/api/scoring/queue` | Scoring | Return leads and latest score | `200` |
+| `GET` | `/api/scoring/queue` | Scoring | Return leads and latest score components | `200` |
 | `GET` | `/api/leads/{lead_id}/dossier` | Scoring | Return complete score and intelligence dossier | `200` |
 | `POST` | `/api/leads/{lead_id}/score` | Scoring | Re-run and persist scoring | `200` |
 | `POST` | `/api/leads/score-batch` | Scoring | Score every currently unscored lead | `200` |
@@ -534,6 +535,12 @@ latest persisted intelligence (when available), and the selected strategy.
 
 The lead must exist (`404`). Incomplete or unavailable AI output returns
 `503`.
+
+### `GET /api/scoring/queue`
+
+Each scored queue item includes `score`, `conversion_probability`,
+`engagement_score`, `fit_score`, `intent_score`, and
+`decision_readiness_score`. Component scores are nullable for unscored leads.
 
 ### `POST /api/outreach/save-draft`
 

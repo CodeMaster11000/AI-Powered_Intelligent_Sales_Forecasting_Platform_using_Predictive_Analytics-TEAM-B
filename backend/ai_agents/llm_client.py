@@ -2,7 +2,8 @@ import json
 import logging
 import os
 import re
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, List, Optional
+
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -20,6 +21,7 @@ class LLMClient:
     """
 
     def __init__(self):
+        self.request_timeout = float(os.environ.get("LLM_REQUEST_TIMEOUT", "2"))
         self.gemini_available = False
         self.openai_available = False
         self.grok_available = False
@@ -51,7 +53,9 @@ class LLMClient:
         if openai_key:
             try:
                 from openai import OpenAI
-                self.openai_client = OpenAI(api_key=openai_key)
+                self.openai_client = OpenAI(
+                    api_key=openai_key, timeout=self.request_timeout
+                )
                 self.openai_available = True
                 logger.info(f"OpenAI LLM Provider initialized ({self.openai_model_name}).")
             except Exception as e:
@@ -65,7 +69,8 @@ class LLMClient:
                 from openai import OpenAI
                 self.grok_client = OpenAI(
                     api_key=xai_key,
-                    base_url="https://api.x.ai/v1"
+                    base_url="https://api.x.ai/v1",
+                    timeout=self.request_timeout,
                 )
                 self.grok_available = True
                 logger.info(f"xAI Grok Provider initialized ({self.grok_model_name}).")
@@ -146,28 +151,24 @@ class LLMClient:
                 if result is not None:
                     self.last_provider_used = f"Google Gemini ({self.gemini_model_name})"
                     return result
-                return None
 
             elif provider == "openai" and self.openai_available:
                 result = self._call_openai_json(system_prompt, user_prompt, temperature)
                 if result is not None:
                     self.last_provider_used = f"OpenAI ({self.openai_model_name})"
                     return result
-                return None
 
             elif provider == "grok" and self.grok_available:
                 result = self._call_grok_json(system_prompt, user_prompt, temperature)
                 if result is not None:
                     self.last_provider_used = f"xAI Grok ({self.grok_model_name})"
                     return result
-                return None
 
             elif provider == "ollama" and (self.ollama_available or pref == "ollama"):
                 result = self._call_ollama_json(system_prompt, user_prompt, temperature)
                 if result is not None:
                     self.last_provider_used = f"Local Ollama ({self.ollama_model_name})"
                     return result
-                return None
 
         return None
 
@@ -245,7 +246,11 @@ class LLMClient:
                         "stream": False,
                         "options": {"temperature": temperature}
                     }
-                    res = httpx.post(f"{self.ollama_base_url}/api/chat", json=payload, timeout=120.0)
+                    res = httpx.post(
+                        f"{self.ollama_base_url}/api/chat",
+                        json=payload,
+                        timeout=self.request_timeout,
+                    )
                     if res.status_code == 200:
                         data = res.json()
                         text = data.get("message", {}).get("content", "")
@@ -323,7 +328,11 @@ class LLMClient:
                 "think": False,
                 "options": {"temperature": temperature}
             }
-            res = httpx.post(f"{self.ollama_base_url}/api/chat", json=payload, timeout=180.0)
+            res = httpx.post(
+                f"{self.ollama_base_url}/api/chat",
+                json=payload,
+                timeout=self.request_timeout,
+            )
             if res.status_code == 200:
                 data = res.json()
                 text = data.get("message", {}).get("content", "")

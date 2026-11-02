@@ -9,6 +9,7 @@ from backend.database.database import Base
 
 if TYPE_CHECKING:
     from backend.database.models.company_insights import CompanyInsight
+    from backend.database.models.lead_analysis_runs import LeadAnalysisRun
     from backend.database.models.lead_scores import LeadScore
     from backend.database.models.outreach_emails import OutreachEmail
     from backend.database.models.users import User
@@ -59,6 +60,9 @@ class Lead(Base):
 
     owner: Mapped["User | None"] = relationship(back_populates="leads")
     insights: Mapped[list["CompanyInsight"]] = relationship(
+        back_populates="lead", cascade="all, delete-orphan", passive_deletes=True
+    )
+    analysis_runs: Mapped[list["LeadAnalysisRun"]] = relationship(
         back_populates="lead", cascade="all, delete-orphan", passive_deletes=True
     )
     scores: Mapped[list["LeadScore"]] = relationship(

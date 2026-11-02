@@ -64,4 +64,6 @@ streamlit run frontend/app.py           # terminal 2 -> http://localhost:8501
 - Every change goes through a pull request (template included); reference the requirement ID, e.g. `REQ-M1-02`.
 - Change an endpoint or table? Update `docs/api/api-contract.md` or `docs/design/database/` in the same PR.
 - Never commit `.env`. Only `.env.example` is tracked.
-- AI packages are separate: `pip install -r requirements-ai.txt` when the AI milestones start.
+- `requirements-dev.txt` includes the AI dependencies because the API imports the LangGraph
+  intelligence routes at startup. Production deployments should install `requirements.txt`
+  and `requirements-ai.txt` together.
