@@ -79,6 +79,25 @@ def render_outreach_studio():
         with st.container(border=True):
             st.markdown("<h4 style='margin:0 0 8px 0; font-size: 15px; font-weight: 600;'>Outreach Strategy & Engine</h4>", unsafe_allow_html=True)
             
+            # Lead Score & Priority Card
+            scoring_info = dossier.get("scoring", {})
+            sc_val = scoring_info.get("score", 0)
+            sc_prob = scoring_info.get("conversion_probability", 0)
+            sc_prio = scoring_info.get("priority", "warm").upper()
+            prio_color = "#059669" if sc_prio == "HOT" else ("#D97706" if sc_prio == "WARM" else "#64748B")
+
+            st.markdown(
+                f"""
+                <div style="background: rgba(125,125,125,0.08); border-left: 3px solid {prio_color}; padding: 8px 12px; border-radius: 4px; margin-bottom: 12px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-weight: 600; font-size: 13px;">Lead Score: {sc_val} / 100</span>
+                        <span style="font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: {prio_color}22; color: {prio_color};">{sc_prio} ({sc_prob}% Win Prob)</span>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            
             # Multi-LLM Provider Selector
             provider_choices = {
                 "🤖 First configured provider": "auto",
