@@ -67,8 +67,18 @@ One profile per lead; regenerating overwrites it.
 | user_id | bigint | yes | FK users.id, who generated it; on user delete set null |
 | subject | text | no | |
 | body | text | no | |
-| status | text | no | `draft`, `sent`; default `draft` |
+| status | text | no | `draft`, `sent`, `archived`; default `draft` |
+| provider | text | yes | LLM/provider label used for generation |
+| model_name | text | yes | model identifier when available |
+| angle | text | yes | outreach value angle |
+| tone | text | yes | requested writing tone |
+| custom_note | text | yes | sales representative context |
+| subject_options | jsonb | yes | generated subject alternatives |
+| generation_metadata | jsonb | yes | generation and scoring context |
 | created_at | timestamptz | no | default now |
+| updated_at | timestamptz | no | last draft edit |
+| sent_at | timestamptz | yes | time the draft was marked sent |
+| archived_at | timestamptz | yes | time the draft was archived |
 
 ## interactions (M3)
 Calls, meetings and notes with a lead.

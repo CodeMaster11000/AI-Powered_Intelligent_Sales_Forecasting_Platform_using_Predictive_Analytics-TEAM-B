@@ -596,6 +596,23 @@ When the current status is `New Leads` or `Qualified`, this operation changes
 it to `Proposal`. The current implementation acknowledges the operation; it
 does not call an external email delivery provider.
 
+### Draft lifecycle endpoints
+
+`GET /api/leads/{lead_id}/drafts` returns saved drafts for a lead, newest
+first. `GET /api/outreach/drafts/{draft_id}` returns one draft.
+
+`PATCH /api/outreach/drafts/{draft_id}` updates `subject` and/or `body` while
+the record is still in `draft` status. `POST
+/api/outreach/drafts/{draft_id}/archive` archives an active draft while
+preserving it as read-only history. `DELETE /api/outreach/drafts/{draft_id}`
+permanently deletes an active draft and returns `204`. Sent and archived
+records cannot be edited or permanently deleted.
+
+`POST /api/outreach/send` accepts an optional `draft_id`. When provided, the
+draft is marked `sent` and receives a `sent_at` timestamp. Without it, the
+endpoint creates a new sent outreach record. This endpoint records the
+application state; external email delivery is not yet configured.
+
 ## 9. LLM provider status
 
 ### `GET /api/llm/providers`

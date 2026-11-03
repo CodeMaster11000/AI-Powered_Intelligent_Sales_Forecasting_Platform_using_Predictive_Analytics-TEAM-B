@@ -140,3 +140,44 @@ class LeadAnalysisResponse(BaseModel):
 
 class BatchAnalysisRequest(BaseModel):
     lead_ids: List[int]
+
+
+class DraftCreateRequest(BaseModel):
+    lead_id: int
+    subject: str = Field(..., min_length=1)
+    body: str = Field(..., min_length=1)
+    status: Literal["draft"] = "draft"
+    provider: str | None = None
+    model_name: str | None = None
+    angle: str | None = None
+    tone: str | None = None
+    custom_note: str | None = None
+    subject_options: list[str] | None = None
+    generation_metadata: dict[str, Any] | None = None
+
+
+class DraftUpdateRequest(BaseModel):
+    subject: str | None = Field(default=None, min_length=1)
+    body: str | None = Field(default=None, min_length=1)
+    status: Literal["draft", "archived"] | None = None
+
+
+class DraftResponse(BaseModel):
+    id: int
+    lead_id: int
+    subject: str
+    body: str
+    status: Literal["draft", "sent", "archived"]
+    provider: str | None = None
+    model_name: str | None = None
+    angle: str | None = None
+    tone: str | None = None
+    custom_note: str | None = None
+    subject_options: list[str] | None = None
+    generation_metadata: dict[str, Any] | None = None
+    created_at: datetime
+    updated_at: datetime
+    sent_at: datetime | None = None
+    archived_at: datetime | None = None
+
+    model_config = ConfigDict(from_attributes=True)

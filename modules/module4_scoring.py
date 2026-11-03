@@ -14,7 +14,7 @@ class LeadScoringResult:
     decision_readiness_score: int
     lead_score: int
     conversion_probability: float
-    factors: dict[str, list[str]]
+    factors: dict[str, dict[str, Any]]
 
 
 def calculate_lead_score(lead: Any, intelligence: dict[str, Any] | None = None) -> LeadScoringResult:
@@ -41,10 +41,30 @@ def calculate_lead_score(lead: Any, intelligence: dict[str, Any] | None = None) 
         lead_score=total,
         conversion_probability=probability,
         factors={
-            "engagement": engagement_factors,
-            "fit": fit_factors,
-            "intent": intent_factors,
-            "decision_readiness": readiness_factors,
+            "engagement": {
+                "label": "Engagement",
+                "score": engagement,
+                "max": 100,
+                "explanations": engagement_factors,
+            },
+            "fit": {
+                "label": "Firmographic & technology fit",
+                "score": fit,
+                "max": 100,
+                "explanations": fit_factors,
+            },
+            "intent": {
+                "label": "Growth & buying intent",
+                "score": intent,
+                "max": 100,
+                "explanations": intent_factors,
+            },
+            "decision_readiness": {
+                "label": "Decision readiness",
+                "score": readiness,
+                "max": 100,
+                "explanations": readiness_factors,
+            },
         },
     )
 

@@ -22,6 +22,7 @@ class LLMClient:
 
     def __init__(self):
         self.request_timeout = float(os.environ.get("LLM_REQUEST_TIMEOUT", "2"))
+        self.local_timeout = float(os.environ.get("OLLAMA_REQUEST_TIMEOUT", "0.1"))
         self.gemini_available = False
         self.openai_available = False
         self.grok_available = False
@@ -34,18 +35,23 @@ class LLMClient:
         # 1. Google Gemini
         gemini_key = os.environ.get("GEMINI_API_KEY")
         self.gemini_model_name = os.environ.get("GEMINI_MODEL", "gemini-1.5-pro")
-        if gemini_key:
+        if gemini_key and self.request_timeout >= 10:
             try:
                 from google import genai
 
                 self.gemini_client = genai.Client(
                     api_key=gemini_key,
-                    http_options={"timeout": 2000},
+                    http_options={"timeout": max(10000, int(self.request_timeout * 1000))},
                 )
                 self.gemini_available = True
                 logger.info(f"Gemini LLM Provider initialized ({self.gemini_model_name}).")
             except Exception as e:
                 logger.warning(f"Could not initialize Gemini: {e}")
+        elif gemini_key:
+            logger.warning(
+                "Gemini provider disabled because LLM_REQUEST_TIMEOUT must be "
+                "at least 10 seconds for the Gemini SDK."
+            )
 
         # 2. OpenAI
         openai_key = os.environ.get("OPENAI_API_KEY")
@@ -70,7 +76,7 @@ class LLMClient:
                 self.grok_client = OpenAI(
                     api_key=xai_key,
                     base_url="https://api.x.ai/v1",
-                    timeout=self.request_timeout,
+                    timeout=self.local_timeout,
                 )
                 self.grok_available = True
                 logger.info(f"xAI Grok Provider initialized ({self.grok_model_name}).")
@@ -249,7 +255,7 @@ class LLMClient:
                     res = httpx.post(
                         f"{self.ollama_base_url}/api/chat",
                         json=payload,
-                        timeout=self.request_timeout,
+                        timeout=self.local_timeout,
                     )
                     if res.status_code == 200:
                         data = res.json()

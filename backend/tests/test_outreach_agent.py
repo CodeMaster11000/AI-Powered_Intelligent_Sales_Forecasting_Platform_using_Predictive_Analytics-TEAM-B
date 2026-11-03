@@ -1,11 +1,17 @@
 from unittest.mock import Mock
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from backend.main import app
 from backend.ai_agents.outreach_agent import generate_personalized_outreach
 from modules.module3_outreach import generate_personalized_email
-from backend.main import SaveDraftRequest, save_outreach_draft
+from backend.main import (
+    SaveDraftRequest,
+    archive_outreach_draft,
+    delete_outreach_draft,
+    save_outreach_draft,
+)
 
 client = TestClient(app)
 
@@ -138,3 +144,38 @@ def test_save_outreach_draft_persists_record():
     assert result["draft_id"] == 42
     db.commit.assert_called_once_with()
     db.refresh.assert_called_once_with(saved_draft)
+
+
+def test_archive_outreach_draft_preserves_record_as_history():
+    db = Mock()
+    draft = Mock(status="draft")
+    db.get.return_value = draft
+
+    result = archive_outreach_draft(42, db)
+
+    assert result is draft
+    assert draft.status == "archived"
+    db.commit.assert_called_once_with()
+    db.refresh.assert_called_once_with(draft)
+
+
+def test_delete_outreach_draft_removes_active_record():
+    db = Mock()
+    draft = Mock(status="draft")
+    db.get.return_value = draft
+
+    response = delete_outreach_draft(42, db)
+
+    db.delete.assert_called_once_with(draft)
+    db.commit.assert_called_once_with()
+    assert response.status_code == 204
+
+
+def test_delete_outreach_draft_rejects_archived_record():
+    db = Mock()
+    db.get.return_value = Mock(status="archived")
+
+    with pytest.raises(HTTPException) as exc_info:
+        delete_outreach_draft(42, db)
+
+    assert exc_info.value.status_code == 409
