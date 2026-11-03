@@ -76,7 +76,7 @@ class LLMClient:
                 self.grok_client = OpenAI(
                     api_key=xai_key,
                     base_url="https://api.x.ai/v1",
-                    timeout=self.local_timeout,
+                    timeout=self.request_timeout,
                 )
                 self.grok_available = True
                 logger.info(f"xAI Grok Provider initialized ({self.grok_model_name}).")
@@ -255,7 +255,7 @@ class LLMClient:
                     res = httpx.post(
                         f"{self.ollama_base_url}/api/chat",
                         json=payload,
-                        timeout=self.local_timeout,
+                        timeout=self.request_timeout,
                     )
                     if res.status_code == 200:
                         data = res.json()
