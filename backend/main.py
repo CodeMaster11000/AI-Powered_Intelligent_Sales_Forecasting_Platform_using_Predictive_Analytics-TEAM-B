@@ -1,7 +1,8 @@
+from datetime import datetime, timezone
+from typing import Literal
 from fastapi import Depends, FastAPI, HTTPException, Query, Response, status
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
-from typing import Literal
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -24,6 +25,9 @@ from backend.schema import (
     CompanyInsightResponse,
     LeadAnalysisResponse,
     BatchAnalysisRequest,
+    DraftCreateRequest,
+    DraftResponse,
+    DraftUpdateRequest,
 )
 from modules.module1_leads import (
     bulk_import_leads,
@@ -257,6 +261,7 @@ def get_lead_dossier(lead_id: int, db: Session = Depends(get_db)):
         "intent_score": score_obj.intent_score,
         "decision_readiness_score": score_obj.decision_readiness_score,
         "scoring_version": score_obj.scoring_version,
+        "factors": _normalise_scoring_factors(score_obj),
         "scoring_factors": score_obj.scoring_factors,
         "priority": "hot" if score_value >= 75 else ("warm" if score_value >= 40 else "cold"),
     }
@@ -272,6 +277,39 @@ def get_lead_dossier(lead_id: int, db: Session = Depends(get_db)):
         "tech_stack": lead.tech_stack or [],
         "scoring": score_data,
         "insights": insight_res,
+    }
+
+
+def _normalise_scoring_factors(score: LeadScore) -> dict:
+    """Expose one UI-safe explainability shape for old and new score rows."""
+    stored = score.scoring_factors or {}
+    if all(isinstance(value, dict) for value in stored.values()):
+        return stored
+
+    scores = {
+        "engagement": score.engagement_score,
+        "fit": score.fit_score,
+        "intent": score.intent_score,
+        "decision_readiness": score.decision_readiness_score,
+    }
+    labels = {
+        "engagement": "Engagement",
+        "fit": "Firmographic & technology fit",
+        "intent": "Growth & buying intent",
+        "decision_readiness": "Decision readiness",
+    }
+    return {
+        key: {
+            "label": labels[key],
+            "score": scores[key],
+            "max": 100,
+            "explanations": value if isinstance(value, list) else [],
+        }
+        for key, value in stored.items()
+        if key in scores
+    } or {
+        key: {"label": labels[key], "score": value, "max": 100, "explanations": []}
+        for key, value in scores.items()
     }
 
 
@@ -319,17 +357,14 @@ class OutreachRequest(BaseModel):
     preferred_provider: str | None = None
 
 
-class SaveDraftRequest(BaseModel):
-    lead_id: int
-    subject: str = Field(..., min_length=1)
-    body: str = Field(..., min_length=1)
-    status: Literal["draft"] = "draft"
+SaveDraftRequest = DraftCreateRequest
 
 
 class SendOutreachRequest(BaseModel):
     lead_id: int
     subject: str
     body: str
+    draft_id: int | None = None
 
 
 @app.post("/api/outreach/generate", tags=["Outreach"])
@@ -367,7 +402,7 @@ def generate_outreach(req: OutreachRequest, db: Session = Depends(get_db)):
 
 
 @app.post("/api/outreach/save-draft", tags=["Outreach"])
-def save_outreach_draft(req: SaveDraftRequest, db: Session = Depends(get_db)):
+def save_outreach_draft(req: DraftCreateRequest, db: Session = Depends(get_db)):
     lead = db.get(Lead, req.lead_id)
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
@@ -376,6 +411,13 @@ def save_outreach_draft(req: SaveDraftRequest, db: Session = Depends(get_db)):
         subject=req.subject,
         body=req.body,
         status=req.status,
+        provider=req.provider,
+        model_name=req.model_name,
+        angle=req.angle,
+        tone=req.tone,
+        custom_note=req.custom_note,
+        subject_options=req.subject_options,
+        generation_metadata=req.generation_metadata,
     )
     db.add(draft)
     db.commit()
@@ -389,6 +431,89 @@ def save_outreach_draft(req: SaveDraftRequest, db: Session = Depends(get_db)):
     }
 
 
+@app.get(
+    "/api/leads/{lead_id}/drafts",
+    response_model=list[DraftResponse],
+    tags=["Outreach"],
+)
+def list_outreach_drafts(lead_id: int, db: Session = Depends(get_db)):
+    if not db.get(Lead, lead_id):
+        raise HTTPException(status_code=404, detail="Lead not found")
+    return db.execute(
+        select(OutreachEmail)
+        .where(OutreachEmail.lead_id == lead_id)
+        .order_by(OutreachEmail.updated_at.desc(), OutreachEmail.id.desc())
+    ).scalars().all()
+
+
+@app.get(
+    "/api/outreach/drafts/{draft_id}",
+    response_model=DraftResponse,
+    tags=["Outreach"],
+)
+def get_outreach_draft(draft_id: int, db: Session = Depends(get_db)):
+    draft = db.get(OutreachEmail, draft_id)
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    return draft
+
+
+@app.patch(
+    "/api/outreach/drafts/{draft_id}",
+    response_model=DraftResponse,
+    tags=["Outreach"],
+)
+def update_outreach_draft(
+    draft_id: int, req: DraftUpdateRequest, db: Session = Depends(get_db)
+):
+    draft = db.get(OutreachEmail, draft_id)
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    if draft.status != "draft":
+        raise HTTPException(status_code=409, detail="Only draft records can be edited")
+    if req.subject is not None:
+        draft.subject = req.subject
+    if req.body is not None:
+        draft.body = req.body
+    if req.status is not None:
+        draft.status = req.status
+        if req.status == "archived":
+            draft.archived_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(draft)
+    return draft
+
+
+@app.post(
+    "/api/outreach/drafts/{draft_id}/archive",
+    response_model=DraftResponse,
+    tags=["Outreach"],
+)
+def archive_outreach_draft(draft_id: int, db: Session = Depends(get_db)):
+    return update_outreach_draft(
+        draft_id, DraftUpdateRequest(status="archived"), db
+    )
+
+
+@app.delete(
+    "/api/outreach/drafts/{draft_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    tags=["Outreach"],
+)
+def delete_outreach_draft(draft_id: int, db: Session = Depends(get_db)):
+    draft = db.get(OutreachEmail, draft_id)
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    if draft.status != "draft":
+        raise HTTPException(
+            status_code=409,
+            detail="Only active drafts can be permanently deleted; archive it instead",
+        )
+    db.delete(draft)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @app.post("/api/outreach/send", tags=["Outreach"])
 def send_outreach_email(req: SendOutreachRequest, db: Session = Depends(get_db)):
     lead = db.get(Lead, req.lead_id)
@@ -398,10 +523,31 @@ def send_outreach_email(req: SendOutreachRequest, db: Session = Depends(get_db))
     # Transition pipeline stage upon sending outreach
     if lead.lead_status in ("New Leads", "Qualified"):
         lead.lead_status = "Proposal"
-        db.commit()
+    sent_record = db.get(OutreachEmail, req.draft_id) if req.draft_id else None
+    if sent_record and sent_record.lead_id != lead.lead_id:
+        raise HTTPException(status_code=400, detail="Draft does not belong to this lead")
+    if sent_record:
+        if sent_record.status != "draft":
+            raise HTTPException(status_code=409, detail="Draft is not editable")
+        sent_record.subject = req.subject
+        sent_record.body = req.body
+        sent_record.status = "sent"
+        sent_record.sent_at = datetime.now(timezone.utc)
+    else:
+        sent_record = OutreachEmail(
+            lead_id=lead.lead_id,
+            subject=req.subject,
+            body=req.body,
+            status="sent",
+            sent_at=datetime.now(timezone.utc),
+        )
+        db.add(sent_record)
+    db.commit()
+    db.refresh(sent_record)
 
     return {
         "status": "sent",
+        "draft_id": sent_record.id,
         "lead_id": req.lead_id,
         "recipient": lead.email,
         "company_name": lead.company_name,

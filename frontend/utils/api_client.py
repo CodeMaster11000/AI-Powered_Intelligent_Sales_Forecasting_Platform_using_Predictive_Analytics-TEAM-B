@@ -198,10 +198,21 @@ def fetch_llm_providers_api() -> dict:
     }
 
 
-def save_outreach_draft_api(lead_id: int, subject: str, body: str) -> tuple[bool, str]:
+def save_outreach_draft_api(
+    lead_id: int,
+    subject: str,
+    body: str,
+    metadata: dict | None = None,
+) -> tuple[bool, str]:
     """Persists a customized outreach email draft."""
     try:
-        payload = {"lead_id": lead_id, "subject": subject, "body": body, "status": "draft"}
+        payload = {
+            "lead_id": lead_id,
+            "subject": subject,
+            "body": body,
+            "status": "draft",
+            **(metadata or {}),
+        }
         res = requests.post(f"{API_BASE_URL}/api/outreach/save-draft", json=payload, timeout=4.0)
         if res.status_code in (200, 201):
             return True, "Draft saved successfully!"
@@ -210,10 +221,71 @@ def save_outreach_draft_api(lead_id: int, subject: str, body: str) -> tuple[bool
         return False, "Draft could not be saved because the backend is unavailable."
 
 
-def send_outreach_email_api(lead_id: int, subject: str, body: str) -> tuple[bool, str]:
+def fetch_outreach_drafts_api(lead_id: int) -> list[dict]:
+    """Loads persisted drafts for a lead."""
+    try:
+        res = requests.get(f"{API_BASE_URL}/api/leads/{lead_id}/drafts", timeout=4.0)
+        if res.status_code == 200:
+            return res.json()
+    except requests.RequestException:
+        pass
+    return []
+
+
+def update_outreach_draft_api(
+    draft_id: int, subject: str, body: str
+) -> tuple[bool, str]:
+    """Updates an existing editable draft."""
+    try:
+        res = requests.patch(
+            f"{API_BASE_URL}/api/outreach/drafts/{draft_id}",
+            json={"subject": subject, "body": body},
+            timeout=4.0,
+        )
+        if res.status_code == 200:
+            return True, "Draft updated successfully!"
+        return False, res.json().get("detail", "Draft could not be updated.")
+    except requests.RequestException:
+        return False, "Draft could not be updated because the backend is unavailable."
+
+
+def archive_outreach_draft_api(draft_id: int) -> tuple[bool, str]:
+    """Archives a persisted draft without deleting its history."""
+    try:
+        res = requests.post(
+            f"{API_BASE_URL}/api/outreach/drafts/{draft_id}/archive", timeout=4.0
+        )
+        if res.status_code == 200:
+            return True, "Draft archived."
+        return False, res.json().get("detail", "Draft could not be archived.")
+    except requests.RequestException:
+        return False, "Draft could not be archived because the backend is unavailable."
+
+
+def delete_outreach_draft_api(draft_id: int) -> tuple[bool, str]:
+    """Permanently deletes an active draft."""
+    try:
+        res = requests.delete(
+            f"{API_BASE_URL}/api/outreach/drafts/{draft_id}", timeout=4.0
+        )
+        if res.status_code == 204:
+            return True, "Draft deleted."
+        return False, res.json().get("detail", "Draft could not be deleted.")
+    except requests.RequestException:
+        return False, "Draft could not be deleted because the backend is unavailable."
+
+
+def send_outreach_email_api(
+    lead_id: int, subject: str, body: str, draft_id: int | None = None
+) -> tuple[bool, str]:
     """Dispatches cold outreach email and logs interaction status."""
     try:
-        payload = {"lead_id": lead_id, "subject": subject, "body": body}
+        payload = {
+            "lead_id": lead_id,
+            "subject": subject,
+            "body": body,
+            "draft_id": draft_id,
+        }
         res = requests.post(f"{API_BASE_URL}/api/outreach/send", json=payload, timeout=5.0)
         if res.status_code in (200, 201):
             return True, "Outreach email dispatched and interaction logged!"

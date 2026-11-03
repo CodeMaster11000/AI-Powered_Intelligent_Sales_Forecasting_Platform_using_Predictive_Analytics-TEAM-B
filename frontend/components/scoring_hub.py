@@ -32,9 +32,15 @@ def render_scoring_hub():
     # 1. Fetch the authoritative queue from the backend
     queue = fetch_scoring_queue_api()
 
-    if not queue:
+    if queue is None:
         with st.container(border=True):
             st.error("Unable to load the scoring queue from the backend.")
+            st.caption("Check that the API is running, then refresh this page.")
+        return
+    if not queue:
+        with st.container(border=True):
+            st.info("No leads are available for scoring yet.")
+            st.caption("Add a lead from Leads & Ingestion to start the scoring workflow.")
         return
 
     # 2. Master-Detail Split: Left Queue (1.6) | Right Dossier (2.4)
@@ -176,8 +182,10 @@ def render_scoring_hub():
 
             # Factor Breakdown (Glass Box AI)
             st.markdown("<h5 style='margin: 0 0 8px 0; font-size: 14px; font-weight: 600;'>Scoring Factor Breakdown</h5>", unsafe_allow_html=True)
-            factors = scoring.get("factors", {})
+            factors = scoring.get("factors") or scoring.get("scoring_factors", {})
             for _, f_data in factors.items():
+                if not isinstance(f_data, dict):
+                    continue
                 max_pts = max(1, f_data.get("max", 100))
                 earned = f_data.get("score", 0)
                 ratio = min(1.0, max(0.0, earned / max_pts))
@@ -186,6 +194,9 @@ def render_scoring_hub():
                 c_lbl.markdown(f"<div style='font-size: 12px;'>{f_data.get('label', 'Factor')}</div>", unsafe_allow_html=True)
                 with c_bar:
                     st.progress(ratio, text=f"{earned} / {max_pts} pts")
+                explanations = f_data.get("explanations") or []
+                if explanations:
+                    st.caption(explanations[0])
 
             st.markdown("<hr style='margin: 14px 0;'/>", unsafe_allow_html=True)
 
@@ -314,9 +325,11 @@ def render_scoring_hub():
             act1, act2 = st.columns([1.5, 2.5])
             with act1:
                 if st.button("🔄 Rescore Lead", use_container_width=True):
-                    score_lead_api(sel_id)
-                    st.toast("Recalculated score and insights!", icon="✅")
-                    st.rerun()
+                    success, message = score_lead_api(sel_id)
+                    if success:
+                        st.toast("Recalculated score and insights!", icon="✅")
+                        st.rerun()
+                    st.error(f"Rescoring failed: {message}")
 
             # Fixed:
             with act2:
