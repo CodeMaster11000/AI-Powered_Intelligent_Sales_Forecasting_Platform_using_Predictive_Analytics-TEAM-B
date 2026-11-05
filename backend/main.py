@@ -46,6 +46,7 @@ from modules.module2_intelligence import (
     get_architecture_diagram,
 )
 from modules.module3_outreach import generate_personalized_email
+from modules.module4_scoring import generate_next_best_action
 
 app = FastAPI(title="SalesGenie AI Core API", version="1.0.0")
 
@@ -265,6 +266,15 @@ def get_lead_dossier(lead_id: int, db: Session = Depends(get_db)):
         "scoring_factors": score_obj.scoring_factors,
         "priority": "hot" if score_value >= 75 else ("warm" if score_value >= 40 else "cold"),
     }
+    next_best_action = generate_next_best_action(
+        score_data=score_data,
+        lead_data={
+            "contact_name": lead.contact_name,
+            "email": lead.email,
+            "phone": lead.phone,
+        },
+        insight_data=insight_res,
+    )
 
     return {
         "lead_id": lead.lead_id,
@@ -277,6 +287,7 @@ def get_lead_dossier(lead_id: int, db: Session = Depends(get_db)):
         "tech_stack": lead.tech_stack or [],
         "scoring": score_data,
         "insights": insight_res,
+        "next_best_action": next_best_action,
     }
 
 
