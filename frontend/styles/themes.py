@@ -116,6 +116,95 @@ def apply_theme():
             border-radius: 10px !important;
         }}
 
+        /* Next best action: readable cards instead of truncating metric widgets. */
+        .nba-heading {{
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+            margin-bottom: 10px;
+        }}
+        .nba-heading h5 {{
+            margin: 2px 0 0;
+            font-size: 16px;
+            font-weight: 700;
+            color: {t['text_primary']};
+        }}
+        .nba-kicker, .nba-label, .nba-section-label {{
+            color: {t['text_secondary']};
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }}
+        .nba-badge {{
+            color: {t['accent']};
+            background: {t['pill_teal_bg']};
+            border: 1px solid {t['pill_teal_border']};
+            border-radius: 999px;
+            padding: 4px 9px;
+            font-size: 11px;
+            white-space: nowrap;
+        }}
+        .nba-action {{
+            background: {t['input_bg']};
+            border: 1px solid {t['input_border']};
+            border-left: 3px solid {t['accent']};
+            border-radius: 8px;
+            color: {t['text_primary']};
+            padding: 13px 15px;
+            font-size: 15px;
+            font-weight: 600;
+            line-height: 1.45;
+            margin-bottom: 14px;
+        }}
+        .nba-details {{
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px;
+            margin-bottom: 16px;
+        }}
+        .nba-detail {{
+            background: {t['card_bg']};
+            border: 1px solid {t['card_border']};
+            border-radius: 8px;
+            min-width: 0;
+            padding: 11px 12px;
+        }}
+        .nba-detail strong {{
+            color: {t['text_primary']};
+            display: block;
+            font-size: 14px;
+            line-height: 1.35;
+            margin-top: 5px;
+            overflow-wrap: anywhere;
+        }}
+        .nba-section-label {{
+            margin: 4px 0 7px;
+        }}
+        .nba-channel {{
+            color: {t['text_primary']};
+            font-size: 13px;
+            line-height: 1.4;
+            padding: 4px 0;
+        }}
+        .nba-channel span {{
+            color: {t['accent']};
+            font-weight: 700;
+            margin-right: 8px;
+        }}
+        .nba-content {{
+            color: {t['text_primary']};
+            font-size: 13px;
+            line-height: 1.55;
+            margin-bottom: 4px;
+        }}
+        @media (max-width: 640px) {{
+            .nba-details {{
+                grid-template-columns: 1fr;
+            }}
+        }}
+
         /* 4. TRANSFORM RADIO BUTTONS INTO SLEEK SEGMENTED TABS (No circles!) */
         div[data-testid="stRadio"] {{
             background: {t['nav_bg']} !important;

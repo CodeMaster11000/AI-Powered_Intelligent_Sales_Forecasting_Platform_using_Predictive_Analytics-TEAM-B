@@ -21,9 +21,9 @@ python -m venv venv            # python3 on Linux/macOS
 # activate the venv (see SETUP.md for your OS)
 pip install -r requirements-dev.txt
 cp .env.example .env           # Copy-Item on Windows PowerShell
-docker compose up -d
-uvicorn backend.main:app --reload       # terminal 1 -> http://localhost:8000/docs
-streamlit run frontend/app.py           # terminal 2 -> http://localhost:8501
+docker compose up -d --build
+# UI -> http://localhost:8501
+# API docs -> http://localhost:8000/docs
 ```
 
 ## Repository layout
@@ -43,7 +43,10 @@ streamlit run frontend/app.py           # terminal 2 -> http://localhost:8501
 │   ├── api/              API contract
 │   ├── testing/          test plan + reports
 │   └── milestones/       per-milestone checklists
-├── docker-compose.yml    PostgreSQL (+ optional pgAdmin)
+├── docker-compose.yml    PostgreSQL, FastAPI, Streamlit (+ optional pgAdmin)
+├── Dockerfile.backend    API image
+├── Dockerfile.frontend   UI image
+├── Makefile              common lifecycle commands
 ├── requirements*.txt     core / dev / AI dependencies
 └── SETUP.md
 ```

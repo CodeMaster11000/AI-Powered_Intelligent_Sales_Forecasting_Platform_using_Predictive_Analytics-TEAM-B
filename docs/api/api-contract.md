@@ -448,7 +448,8 @@ Priority is `hot` for score `>=75`, `warm` for `40..74`, and `cold` below
 
 ### `GET /api/leads/{lead_id}/dossier`
 
-Returns the lead profile plus `scoring` and `insights`. If either is missing,
+Returns the lead profile plus `scoring`, `insights`, and a structured
+`next_best_action`. If either scoring or intelligence data is missing,
 the endpoint automatically runs and persists analysis before responding.
 
 ```json
@@ -466,7 +467,14 @@ the endpoint automatically runs and persists analysis before responding.
     "conversion_probability": 69.7,
     "priority": "hot"
   },
-  "insights": { "...": "CompanyInsightResponse" }
+  "insights": { "...": "CompanyInsightResponse" },
+  "next_best_action": {
+    "urgency": "High Priority",
+    "follow_up_timing": "Immediate (< 24 Hours)",
+    "channel_mix": ["Hyper-Personalized Cold Email", "LinkedIn InMail / Social Touch"],
+    "content_strategy": "Focus conversation on Cloud Migration Opportunities with quantified ROI benchmarks.",
+    "recommended_action": "Schedule a discovery session with Jane Doe."
+  }
 }
 ```
 

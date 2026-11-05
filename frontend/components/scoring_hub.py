@@ -7,6 +7,7 @@ try:
         fetch_scoring_queue_api,
         score_lead_api,
     )
+    from frontend.components.next_best_action import render_next_best_action
 except ModuleNotFoundError:
     from utils.api_client import (
         batch_score_api,
@@ -14,6 +15,7 @@ except ModuleNotFoundError:
         fetch_scoring_queue_api,
         score_lead_api,
     )
+    from components.next_best_action import render_next_best_action
 
 
 def _sync_selected_lead(session_state, filtered_queue: list[dict]) -> None:
@@ -159,6 +161,7 @@ def render_scoring_hub():
 
         scoring = dossier.get("scoring", {})
         insights = dossier.get("insights", {})
+        next_best_action = dossier.get("next_best_action")
 
         with st.container(border=True):
             # Header info
@@ -208,6 +211,10 @@ def render_scoring_hub():
                 explanations = f_data.get("explanations") or []
                 if explanations:
                     st.caption(explanations[0])
+
+            st.markdown("<hr style='margin: 14px 0;'/>", unsafe_allow_html=True)
+
+            render_next_best_action(next_best_action)
 
             st.markdown("<hr style='margin: 14px 0;'/>", unsafe_allow_html=True)
 

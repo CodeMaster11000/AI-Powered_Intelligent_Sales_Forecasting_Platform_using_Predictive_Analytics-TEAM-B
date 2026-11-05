@@ -3,7 +3,7 @@
 
 Pick your operating system: [Linux](#linux-ubuntu--debian) | [macOS](#macos) | [Windows](#windows-10--11). Then continue with [Running the project](#running-the-project) and [Troubleshooting](#troubleshooting).
 
-**What you will have at the end:** A Python virtual environment with the project dependencies installed, PostgreSQL running in Docker, and the API and UI ready to run locally.
+**What you will have at the end:** PostgreSQL, the API, and the UI running together through Docker Compose.
 
 Docker is used for the database so everyone gets the same PostgreSQL setup without installing or configuring PostgreSQL manually.
 
@@ -66,18 +66,27 @@ pip install -r requirements-dev.txt
 cp .env.example .env
 ```
 
-### 5. Start the database
+### 5. Start the application stack
 
 ```bash
-docker compose up -d db
+docker compose up -d --build
 docker compose ps
 ```
 
-Wait until the database is healthy.
+The backend waits for a healthy database, applies Alembic migrations, and starts
+the API. Open the UI at http://localhost:8501 and the API docs at
+http://localhost:8000/docs.
 
-Follow the [Database Setup Guide](backend/database/SETUP.md) to initialize the database schema.
+The equivalent shortcuts are:
 
-Continue to [Running the project](#running-the-project).
+```bash
+make up
+make logs
+make down
+make test
+```
+
+For database-only or local Python development, use the [Database Setup Guide](backend/database/SETUP.md).
 
 ---
 
