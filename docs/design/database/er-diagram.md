@@ -1,61 +1,90 @@
 # ER Diagram
 
-GitHub renders the Mermaid diagram below. A styled export is in `er-diagram.png` / `er-diagram.svg`
-(sources: `er-diagram.mmd`, `er-diagram.dot`; rebuild the image with `dot -Tpng er-diagram.dot -o er-diagram.png`).
-
-![ER diagram](er-diagram.png)
+GitHub renders the Mermaid diagram below. The editable source is
+[`er-diagram.mmd`](er-diagram.mmd). The diagram reflects the current
+SQLAlchemy models and Alembic migrations.
 
 ```mermaid
 erDiagram
     USERS ||--o{ LEADS : owns
     USERS ||--o{ OUTREACH_EMAILS : writes
-    USERS ||--o{ INTERACTIONS : logs
     LEADS ||--o{ LEAD_SCORES : "scored over time"
-    LEADS ||--o| COMPANY_INSIGHTS : "profiled by"
+    LEADS ||--o{ COMPANY_INSIGHTS : "profiled by"
+    LEADS ||--o{ LEAD_ANALYSIS_RUNS : "analyzed by"
     LEADS ||--o{ OUTREACH_EMAILS : receives
-    LEADS ||--o{ INTERACTIONS : has
 
     USERS {
-        bigint id PK
+        bigint user_id PK
         text name
         text email UK
         text role
+        text department
         timestamptz created_at
     }
     LEADS {
-        bigint id PK
-        bigint owner_id FK
+        bigint lead_id PK
+        bigint owner_user_id FK
         text company_name
         text industry
         text contact_name
         text contact_title
-        text email UK
+        text email
         text phone
         text company_size
-        text location
+        text annual_revenue
         text funding_stage
+        text funding_raised
+        text location
         jsonb tech_stack
-        text stage
+        text lead_status
         text source
         timestamptz created_at
         timestamptz updated_at
     }
     LEAD_SCORES {
-        bigint id PK
+        bigint score_id PK
         bigint lead_id FK
-        int score
-        text priority
-        jsonb factors
-        text reason
-        timestamptz created_at
+        int lead_score
+        numeric conversion_probability
+        int engagement_score
+        int fit_score
+        int intent_score
+        int decision_readiness_score
+        text scoring_version
+        jsonb scoring_factors
+        timestamptz generated_at
     }
     COMPANY_INSIGHTS {
-        bigint id PK
+        bigint insight_id PK
         bigint lead_id FK
-        text summary
+        text business_needs
         text opportunities
-        text pain_points
-        timestamptz created_at
+        text industry_analysis
+        int qualification_score
+        text growth_indicators
+        text tech_alignment
+        text decision_maker_summary
+        timestamptz generated_at
+    }
+    LEAD_ANALYSIS_RUNS {
+        bigint analysis_id PK
+        bigint lead_id FK
+        int qualification_score
+        boolean high_growth_potential
+        funding_analysis text
+        int overall_tech_compatibility_score
+        text industry_domain_analysis
+        text business_needs_summary
+        text strategic_recommendation
+        jsonb growth_indicators
+        jsonb tech_stack_components
+        jsonb transformation_opportunities
+        jsonb tech_alignment_metrics
+        jsonb decision_makers
+        jsonb execution_trace
+        jsonb errors
+        float execution_latency_seconds
+        timestamptz generated_at
     }
     OUTREACH_EMAILS {
         bigint id PK
@@ -64,17 +93,16 @@ erDiagram
         text subject
         text body
         text status
+        text provider
+        text model_name
+        text angle
+        text tone
+        text custom_note
+        jsonb subject_options
+        jsonb generation_metadata
         timestamptz created_at
-    }
-    INTERACTIONS {
-        bigint id PK
-        bigint lead_id FK
-        bigint user_id FK
-        text type
-        timestamptz occurred_at
-        text raw_notes
-        text summary
-        jsonb action_items
-        timestamptz created_at
+        timestamptz updated_at
+        timestamptz sent_at
+        timestamptz archived_at
     }
 ```

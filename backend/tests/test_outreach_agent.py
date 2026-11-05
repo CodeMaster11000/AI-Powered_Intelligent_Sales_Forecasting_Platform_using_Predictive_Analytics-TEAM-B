@@ -146,6 +146,30 @@ def test_save_outreach_draft_persists_record():
     db.refresh.assert_called_once_with(saved_draft)
 
 
+def test_save_outreach_draft_uses_a_unique_database_generated_id_per_record():
+    db = Mock()
+    db.get.return_value = Mock(lead_id=7, company_name="Example Corp")
+    saved_ids = iter((101, 102))
+
+    def refresh_draft(draft):
+        draft.id = next(saved_ids)
+
+    db.refresh.side_effect = refresh_draft
+
+    first = save_outreach_draft(
+        SaveDraftRequest(lead_id=7, subject="First", body="First body"), db
+    )
+    second = save_outreach_draft(
+        SaveDraftRequest(lead_id=7, subject="Second", body="Second body"), db
+    )
+
+    assert first["draft_id"] == 101
+    assert second["draft_id"] == 102
+    assert first["draft_id"] != second["draft_id"]
+    assert db.add.call_count == 2
+    assert db.commit.call_count == 2
+
+
 def test_archive_outreach_draft_preserves_record_as_history():
     db = Mock()
     draft = Mock(status="draft")
