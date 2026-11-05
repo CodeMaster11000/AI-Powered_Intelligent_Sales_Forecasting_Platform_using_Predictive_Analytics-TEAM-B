@@ -16,6 +16,18 @@ except ModuleNotFoundError:
     )
 
 
+def _sync_selected_lead(session_state, filtered_queue: list[dict]) -> None:
+    """Keep the detail selection aligned with the currently visible queue."""
+    visible_ids = {lead["lead_id"] for lead in filtered_queue}
+    selected_id = session_state.get("selected_lead_id")
+    if selected_id in visible_ids:
+        return
+    if filtered_queue:
+        session_state["selected_lead_id"] = filtered_queue[0]["lead_id"]
+    else:
+        session_state.pop("selected_lead_id", None)
+
+
 def render_scoring_hub():
     """Renders the Master-Detail Lead Scoring & Intelligence Hub (Wireframe A)."""
     
@@ -88,9 +100,8 @@ def render_scoring_hub():
 
             st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
 
-            # Keep selection valid
-            if "selected_lead_id" not in st.session_state and filtered_queue:
-                st.session_state["selected_lead_id"] = filtered_queue[0]["lead_id"]
+            # Keep selection valid when search or tier filters change.
+            _sync_selected_lead(st.session_state, filtered_queue)
 
             if not filtered_queue:
                 st.caption("No prospects match current filter.")

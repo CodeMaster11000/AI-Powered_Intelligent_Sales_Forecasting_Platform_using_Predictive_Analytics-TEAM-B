@@ -1,10 +1,8 @@
 # Milestone 2 Test Report: AI Cold Outreach & Predictive Lead Scoring Engine
 
-**Project:** SalesGenie AI Platform  
-**Milestone:** 2 - AI Outreach Generation & Predictive Lead Scoring Engine (Modules 3 & 4)  
-**Authors:** Devendra Bisne (QA Engineer) & Jayant Vaibhav (AI/ML Engineer)  
-**Evaluation Checkpoint:** Batch-4 Milestone 2 (Days 10–20 / Oct 21–31, 2026)  
-**Scope:** SRS Modules 3 and 4, as implemented across backend, AI agent layer, and frontend studio  
+**Project:** SalesGenie AI Platform
+**Milestone:** 2 - AI Outreach Generation & Predictive Lead Scoring Engine (Modules 3 & 4)
+**Scope:** SRS Modules 3 and 4, as implemented across backend, AI agent layer, and frontend studio
 
 ---
 
@@ -13,7 +11,7 @@
 Milestone 2 testing focused on verifying the end-to-end functionality, resilience, and accuracy of the **AI Cold Outreach Personalization Engine (Module 3)** and the **Predictive Lead Scoring & Recommendation Engine (Module 4)**.
 
 Key validation results:
-- **Test Suite Pass Rate:** 100% across all automated unit and integration tests (12 collected tests in `test_outreach_agent.py`, `test_llm_client.py`, and `test_lead_scoring.py`).
+- **Test Suite Pass Rate:** 100% across the current full suite (**36 passed, 0 failed**), including 22 directly relevant Milestone 2 tests.
 - **Scoring Accuracy Validation:** Achieved **91.2% classification accuracy** against the target threshold of 85.0% across our benchmark evaluation test set of enterprise, mid-market, and early-stage prospect profiles.
 - **Outreach SLA Compliance:** Multi-LLM generation latency averaged **2.14 seconds**, well within the IEEE SRS sub-5-second SLA target (REQ IEEE 830 Clause 5.3.6).
 - **Failover Resilience:** Verified seamless multi-LLM cascading across Google Gemini 1.5 Pro, OpenAI GPT-4o-mini, xAI Grok-2, Local Ollama, and local deterministic fallback.
@@ -37,10 +35,12 @@ Key validation results:
 
 | Test Module | Tests Executed | Passed | Failed | Duration | Primary Focus |
 |---|:---:|:---:|:---:|:---:|---|
-| [`backend/tests/test_outreach_agent.py`](../../backend/tests/test_outreach_agent.py) | 6 | 6 | 0 | 1.42s | Multi-tone email generation, triggers, A/B subjects, hook score |
-| [`backend/tests/test_llm_client.py`](../../backend/tests/test_llm_client.py) | 2 | 2 | 0 | 0.88s | Unified multi-LLM provider cascading, JSON parsing, error handling |
+| [`backend/tests/test_outreach_agent.py`](../../backend/tests/test_outreach_agent.py) | 10 | 10 | 0 | Included in full run | Multi-tone email generation, triggers, A/B subjects, draft lifecycle, unique IDs |
+| [`backend/tests/test_llm_client.py`](../../backend/tests/test_llm_client.py) | 6 | 6 | 0 | Included in full run | Unified multi-LLM provider cascading, JSON parsing, error handling |
 | [`backend/tests/test_lead_scoring.py`](../../backend/tests/test_lead_scoring.py) | 4 | 4 | 0 | 0.65s | 4-factor scoring weights, conversion probability, Next-Best-Action |
-| **Total Automated Suite** | **12** | **12** | **0** | **2.95s** | **100% PASS** |
+| [`backend/tests/test_milestone2_surfaces.py`](../../backend/tests/test_milestone2_surfaces.py) | 2 | 2 | 0 | Included in full run | Scoring Hub selection synchronization after filtering |
+| **Milestone 2 Tests** | **22** | **22** | **0** | **Focused: 16 selected** | **100% PASS** |
+| **Full Repository Suite** | **36** | **36** | **0** | **25.87s** | **100% PASS** |
 
 ---
 
@@ -126,10 +126,37 @@ The recommendation engine was tested against Hot, Warm, and Cold lead states:
 | **DEF-M2-01** | `NameError: logger not defined` during fallback execution. | Module-level logger was missing in `outreach_agent.py`. | Initialized `logger = logging.getLogger(__name__)`. | 🟢 **Closed / Verified** |
 | **DEF-M2-02** | Scoring progress bars were empty in `scoring_hub.py`. | API was returning `score` without nested `factors`. | Wired `module4_scoring.calculate_predictive_score` into `/dossier` endpoint. | 🟢 **Closed / Verified** |
 | **DEF-M2-03** | Outreach studio lacked visible lead score context. | Frontend left pane lacked Lead Score & Win Probability card. | Added Lead Score & Strategy card into `outreach_studio.py` (Day 16). | 🟢 **Closed / Verified** |
+| **DEF-M2-04** | **Historical failure:** saving multiple drafts could return/reuse a repeating draft ID, so the newly saved draft was not reliably editable after reload. | Draft persistence and ID handling were not covered by a unique-ID regression test. | Draft records use identity-backed primary keys; the save handler refreshes the persisted record and returns its database-generated ID. Added a two-save regression test proving IDs remain distinct. | 🟢 **Closed / Regression Verified** |
+| **DEF-M2-05** | Applying a search or priority filter could leave a previously selected, now-hidden lead displayed in the detail pane. | Selection state was not synchronized with the filtered queue. | Added `_sync_selected_lead` to select the first visible lead or clear selection when there are no matches. | 🟢 **Closed / Regression Verified** |
 
 ---
 
-## 8. Milestone 2 Sign-Off Recommendation
+## 8. Follow-up Regression Test Cases
+
+The following cases were added after reviewing the email outreach and scoring-hub workflows:
+
+| Test ID | Area | Test case | Expected result | Result |
+|---|---|---|---|:---:|
+| M2-OUT-01 | Email outreach | Save two drafts for the same lead | Each persisted record receives a distinct database-generated ID | PASS |
+| M2-OUT-02 | Email outreach | Save a draft and verify its fields and returned ID | Subject, body, status, and returned ID match the persisted record | PASS |
+| M2-OUT-03 | Email outreach | Archive a draft | Record remains available as history and becomes non-editable | PASS |
+| M2-OUT-04 | Email outreach | Delete an active draft | Draft is deleted; archived/sent records remain protected | PASS |
+| M2-SCORE-01 | Scoring Hub | Filter out the currently selected lead | Selection moves to the first visible lead | PASS |
+| M2-SCORE-02 | Scoring Hub | Apply a filter with no matches | Selection is cleared and stale dossier content is not shown | PASS |
+| M2-SCORE-03 | Scoring engine | Score hot, warm, and cold lead profiles | Priority thresholds and conversion probabilities remain valid | PASS |
+
+### Current validation run
+
+- Focused Milestone 2 tests: **16 passed**
+- Full repository test suite: **36 passed, 0 failed**
+- Python compilation for changed files: **passed**
+- Live PostgreSQL validation completed successfully: the database is at
+  migration head `5a1b2c3d4e5f`, `alembic check` reports no pending upgrade
+  operations, and `alembic upgrade head` completed without changes. The
+  production schema and migration use identity-backed primary keys for draft
+  records.
+
+## 9. Milestone 2 Sign-Off Recommendation
 
 All technical deliverables for **Milestone 2 (Modules 3 and 4)** satisfy IEEE SRS requirements and evaluation criteria:
 - **Module 3:** Multi-LLM Cold Outreach API, Prompts, UI Studio, and Failover are **Production-Ready**.
@@ -137,5 +164,4 @@ All technical deliverables for **Milestone 2 (Modules 3 and 4)** satisfy IEEE SR
 
 **QA & AI Engineering Sign-Off:**  
 *Devendra Bisne (QA Engineer) & Jayant Vaibhav (AI/ML Engineer)*  
-*Date: 31-Oct-2026*
-
+*Regression review date: 04-Nov-2026*
