@@ -1,171 +1,172 @@
 import streamlit as st
-from frontend.utils.api_client import (
-    analyze_lead_api,
-    fetch_leads_api,
-    fetch_lead_insights_api,
-    analyze_prospect_ad_hoc_api,
+
+from frontend.components.ui import (
+    backend_error, card_title, chips, empty_state, html, info_grid, page_header, progress_bar, score_ring,
 )
-from modules.module2_intelligence import analyze_lead_intelligence, get_architecture_diagram
+from frontend.utils.api_client import (
+    analyze_lead_api, analyze_prospect_ad_hoc_api, fetch_leads_api,
+)
+from frontend.utils.helpers import esc, priority_for
+
+try:  # local fallback engine (used only when the API route is unavailable)
+    from modules.module2_intelligence import analyze_lead_intelligence, get_architecture_diagram
+except ImportError:  # pragma: no cover
+    analyze_lead_intelligence = None
+    get_architecture_diagram = None
+
+MODES = ["📋 Analyze a stored lead", "⚡ Ad-hoc prospect evaluation"]
+INDUSTRIES = ["Enterprise Software", "Fintech", "Healthtech", "E-commerce", "Manufacturing", "Logistics"]
+SIZES = ["50-100 employees", "100-250 employees", "250-500 employees", "500-1000 employees", "1000+ employees"]
+STAGES = ["Series C", "Series B", "Series A", "Seed", "Public", "Bootstrapped"]
 
 
-def render_intelligence_view():
-    """
-    Module 2: AI Lead Intelligence & Company Profiling View
-    Renders LangGraph multi-agent intelligence results, qualification scores,
-    and business transformation opportunities per IEEE Std 830-1998 REQ-M2-01, M2-02, M2-03.
-    """
-    st.subheader("🧠 Multi-Agent Lead Intelligence Engine")
-    st.caption("Powered by LangGraph (Research Agent & Qualification Agent) with IEEE 830 grounding.")
+def render_intelligence_view() -> None:
+    """Lead intelligence: LangGraph research + qualification agents."""
+    page_header("AI Lead Intelligence",
+                "Research and qualification agents profile a company, rate fit and suggest the opening angle.")
 
-    analysis_mode = st.radio(
-        "Select Intelligence Mode:",
-        ["📋 Analyze Ingested Database Lead", "⚡ Ad-Hoc Prospect Evaluation"],
-        horizontal=True,
-    )
-
-    if analysis_mode == "📋 Analyze Ingested Database Lead":
-        # leads = fetch_leads_api(limit=50)
-        leads = fetch_leads_api()
-        if not leads:
-            st.error("Unable to load leads from the backend.")
-            return
-
-        lead_options = {}
-        for l in leads:
-            label = f"ID #{l.get('lead_id')}: {l.get('company_name')} ({l.get('industry') or 'General'}) - {l.get('email')}"
-            lead_options[label] = l
-
-        selected_label = st.selectbox("Choose Prospect to Analyze:", list(lead_options.keys()))
-        selected_lead = lead_options[selected_label]
-
-        col_btn, col_info = st.columns([1, 3])
-        with col_btn:
-            run_btn = st.button("🚀 Run Agentic Analysis", type="primary", use_container_width=True)
-
-        if run_btn:
-            with st.spinner("🤖 Running LangGraph Multi-Agent Orchestration (Research Agent + Qualification Agent)..."):
-                lead_id = selected_lead.get("lead_id")
-                if lead_id:
-                    success, result = analyze_lead_api(lead_id)
-                else:
-                    success, result = True, analyze_lead_intelligence(selected_lead)
-
-                if success and isinstance(result, dict):
-                    st.success("✅ Multi-Agent Analysis Completed in Compliance with IEEE Std 830 REQ-M2-01/02/03!")
-                    _display_intelligence_dashboard(result)
-                else:
-                    st.error(f"Analysis Error: {result}")
-
+    mode = st.radio("Mode", MODES, horizontal=True, key="intel_mode", label_visibility="collapsed")
+    if mode == MODES[0]:
+        _stored_lead_mode()
     else:
-        # Ad-hoc evaluation form
-        with st.form("adhoc_intelligence_form"):
-            col1, col2 = st.columns(2)
-            with col1:
-                company_name = st.text_input("Company Name*", value="AlphaLogix Solutions")
-                industry = st.selectbox("Industry", ["Enterprise Software", "Fintech", "Healthtech", "E-commerce", "Manufacturing", "Logistics"])
-                contact_name = st.text_input("Decision Maker / Contact", value="Elena Rostova (VP of Engineering)")
-                company_size = st.selectbox("Company Size", ["50-100 employees", "100-250 employees", "250-500 employees", "500-1000 employees", "1000+ employees"])
-            with col2:
-                funding_stage = st.selectbox("Funding Stage", ["Series C", "Series B", "Series A", "Seed", "Public", "Bootstrapped"])
-                capital_raised = st.text_input("Capital Raised", value="$35M")
-                annual_revenue = st.text_input("Annual Revenue", value="$25M-$50M")
-                tech_stack = st.text_input("Active Tech Stack", value="AWS, Python, React, PostgreSQL, Docker, Kubernetes")
-
-            submit_adhoc = st.form_submit_button("🧠 Execute Multi-Agent Intelligence Profiling", type="primary")
-
-        if submit_adhoc:
-            payload = {
-                "company_name": company_name,
-                "industry": industry,
-                "contact_name": contact_name,
-                "company_size": company_size,
-                "funding_stage": funding_stage,
-                "capital_raised": capital_raised,
-                "annual_revenue": annual_revenue,
-                "tech_stack": tech_stack,
-            }
-            with st.spinner("Executing Research and Qualification Agents..."):
-                result = analyze_lead_intelligence(payload)
-                st.success("✅ Agentic Analysis Completed Successfully!")
-                _display_intelligence_dashboard(result)
+        _ad_hoc_mode()
 
 
-def _display_intelligence_dashboard(data: dict):
-    """Renders structured executive cards for lead intelligence outputs."""
-    score = data.get("qualification_score", 0)
-    conversion_prob = data.get("conversion_probability") or round(score * 0.85, 1)
-    latency = data.get("execution_latency_seconds", 0.05)
-    high_growth = data.get("high_growth_potential", False)
+def _stored_lead_mode() -> None:
+    leads = fetch_leads_api()
+    if leads is None:
+        with st.container(border=True):
+            backend_error("leads")
+        return
+    if not leads:
+        with st.container(border=True):
+            empty_state("🗂️", "No stored leads", "Add a lead first, or try the ad-hoc evaluation.")
+        return
 
-    # 1. Top Metrics Cards
-    m1, m2, m3, m4 = st.columns(4)
-    with m1:
-        st.metric("🎯 Qualification Score", f"{score}/100", delta="High Fit" if score >= 75 else "Medium Fit")
-    with m2:
-        st.metric("📈 Conversion Probability", f"{conversion_prob}%")
-    with m3:
-        st.metric("⚡ Processing Latency", f"{latency}s", delta="SLA < 5s Met")
-    with m4:
-        st.metric("🚀 High Growth Signal", "Active (Series Funded)" if high_growth else "Moderate")
+    options = {f"#{l.get('lead_id')} · {l.get('company_name')} ({l.get('industry') or 'General'}) — {l.get('email')}": l for l in leads}
+    with st.container(border=True):
+        label = st.selectbox("Prospect to analyze", list(options))
+        lead = options[label]
+        run = st.button("🚀 Run agentic analysis", type="primary", width="stretch", key="run_stored_analysis")
 
-    st.markdown("---")
+    result_key = "intel_result_stored"
+    if run:
+        with st.spinner("Research and Qualification agents are working (this can take up to a minute)…"):
+            ok, result = analyze_lead_api(lead["lead_id"])
+        if ok and isinstance(result, dict):
+            st.session_state[result_key] = {"lead_id": lead["lead_id"], "data": result}
+        else:
+            st.session_state.pop(result_key, None)
+            st.error(f"Analysis failed: {result}")
+    cached = st.session_state.get(result_key)
+    if cached and cached["lead_id"] == lead["lead_id"]:
+        _display_results(cached["data"])
 
-    # 2. Strategic Summary & Domain Analysis
-    c1, c2 = st.columns([1, 1])
+
+def _ad_hoc_mode() -> None:
+    with st.form("adhoc_intelligence_form"):
+        c1, c2 = st.columns(2)
+        with c1:
+            company = st.text_input("Company name *")
+            industry = st.selectbox("Industry", INDUSTRIES)
+            contact = st.text_input("Decision maker / contact", placeholder="e.g. Elena Rostova, VP Engineering")
+            size = st.selectbox("Company size", SIZES)
+        with c2:
+            stage = st.selectbox("Funding stage", STAGES)
+            raised = st.text_input("Capital raised", placeholder="e.g. $35M")
+            revenue = st.text_input("Annual revenue", placeholder="e.g. $25M-$50M")
+            stack = st.text_input("Active tech stack", placeholder="AWS, Python, React, PostgreSQL")
+        submit = st.form_submit_button("🧠 Run intelligence profiling", width="stretch")
+
+    if submit:
+        if not company.strip():
+            st.error("Company name is required.")
+            return
+        payload = {"company_name": company.strip(), "industry": industry, "contact_name": contact.strip(),
+                   "company_size": size, "funding_stage": stage, "capital_raised": raised.strip(),
+                   "annual_revenue": revenue.strip(), "tech_stack": stack.strip()}
+        with st.spinner("Executing Research and Qualification agents…"):
+            ok, result = analyze_prospect_ad_hoc_api(payload)
+            if not ok and analyze_lead_intelligence:  # API route unavailable -> local engine
+                try:
+                    ok, result = True, analyze_lead_intelligence(payload)
+                except Exception as exc:  # noqa: BLE001
+                    ok, result = False, f"Local engine error: {exc}"
+        if ok and isinstance(result, dict):
+            st.session_state["intel_result_adhoc"] = result
+        else:
+            st.session_state.pop("intel_result_adhoc", None)
+            st.error(f"Analysis failed: {result}")
+    if st.session_state.get("intel_result_adhoc"):
+        _display_results(st.session_state["intel_result_adhoc"])
+
+
+def _display_results(data: dict) -> None:
+    score = data.get("qualification_score", 0) or 0
+    prob = data.get("conversion_probability")
+    prob = prob if prob is not None else round(score * 0.85, 1)
+    latency = data.get("execution_latency_seconds")
+
+    html("<div style='height:8px'></div>")
+    c1, c2 = st.columns([1, 3])
     with c1:
-        st.markdown("#### 🏢 Automated Company Profiling (REQ-M2-01)")
-        domain_analysis = data.get("industry_analysis") or data.get("industry_domain_analysis", "Enterprise domain analyzed.")
-        st.write(domain_analysis)
-
-        growth_indicators = data.get("growth_indicators") or []
-        if growth_indicators:
-            st.markdown("**Key Growth Signals:**")
-            for ind in growth_indicators:
-                st.markdown(f"- 📈 {ind}")
-
+        with st.container(border=True):
+            html(f"<div style='display:flex;justify-content:center'>{score_ring(score, 120)}</div>"
+                 f"<div class='sg-eyebrow' style='text-align:center'>Qualification score</div>")
     with c2:
-        st.markdown("#### 🎯 Strategic Recommendation & Needs (REQ-M2-03)")
-        rec = data.get("strategic_recommendation", "Direct executive engagement recommended.")
-        st.info(f"💡 **Recommendation:** {rec}")
-        needs = data.get("business_needs") or data.get("business_needs_summary", "Operational efficiency scaling.")
-        st.markdown(f"**Business Needs:** {needs}")
+        with st.container(border=True):
+            info_grid([
+                ("Fit", "High fit" if score >= 75 else "Medium fit" if priority_for(score) == "warm" else "Low fit"),
+                ("Conversion probability", f"{prob}%"),
+                ("Processing time", f"{latency}s" if latency is not None else "n/a"),
+                ("Growth signal", "Active (funded)" if data.get("high_growth_potential") else "Moderate"),
+            ])
+            html("<div style='height:10px'></div>")
+            html(f"<div class='sg-callout'>💡 <b>Recommendation:</b> "
+                 f"{esc(data.get('strategic_recommendation'), 'Direct executive engagement recommended.')}</div>")
 
-    st.markdown("---")
+    left, right = st.columns(2)
+    with left:
+        with st.container(border=True):
+            card_title("Company profile", "REQ-M2-01")
+            html(f"<div style='font-size:13.5px;line-height:1.6'>{esc(data.get('industry_analysis') or data.get('industry_domain_analysis'), 'Enterprise domain analyzed.')}</div>")
+            if data.get("growth_indicators"):
+                html("<div style='height:10px'></div><div class='sg-eyebrow'>Key growth signals</div><div style='height:4px'></div>")
+                chips([f"📈 {g}" for g in data["growth_indicators"]], "teal")
+    with right:
+        with st.container(border=True):
+            card_title("Business needs", "REQ-M2-03")
+            html(f"<div style='font-size:13.5px;line-height:1.6'>{esc(data.get('business_needs') or data.get('business_needs_summary'), 'Operational efficiency scaling.')}</div>")
 
-    # 3. Business Transformation Opportunities (REQ-M2-02)
-    st.markdown("#### 🔍 Identified Business Opportunities (REQ-M2-02)")
-    opportunities = data.get("transformation_opportunities") or []
-    if opportunities:
-        cols = st.columns(min(len(opportunities), 4))
-        for idx, opp in enumerate(opportunities):
-            col = cols[idx % len(cols)]
-            with col:
-                detected = opp.get("detected", False)
-                status_icon = "🟢" if detected else "⚪"
-                st.markdown(f"**{status_icon} {opp.get('opportunity_name')}**")
-                st.caption(f"Impact: **{opp.get('impact_level', 'Medium')}** | Confidence: **{int(opp.get('confidence', 0.8)*100)}%**")
-                st.write(opp.get("details", ""))
-                st.caption(f"⏱️ ROI: {opp.get('estimated_roi_timeline', '3-6 mos')}")
+    with st.container(border=True):
+        card_title("Business transformation opportunities", "REQ-M2-02")
+        opps = data.get("transformation_opportunities") or []
+        if not opps:
+            st.caption("No opportunities identified.")
+        cols = st.columns(min(len(opps), 3) or 1)
+        for i, o in enumerate(opps):
+            conf = o.get("confidence")
+            conf_txt = f"{conf * 100:.0f}%" if isinstance(conf, (int, float)) else "n/a"
+            with cols[i % len(cols)]:
+                html(
+                    f"<div class='sg-opp'><div class='sg-opp-title'>{'🟢' if o.get('detected') else '⚪'} {esc(o.get('opportunity_name'))}</div>"
+                    f"<div class='sg-opp-meta'>{esc(o.get('impact_level'), 'Medium')} impact · {esc(conf_txt)} confidence</div>"
+                    f"<div class='sg-opp-body'>{esc(o.get('details'), '')}</div>"
+                    f"<div class='sg-opp-meta'>ROI: {esc(o.get('estimated_roi_timeline'), '3–6 months')}</div></div>"
+                )
 
-    # 4. Tech Alignment & Decision Makers Accordion
-    with st.expander("🛠️ Tech Stack Alignment & Buyer Persona Details", expanded=False):
-        col_t, col_p = st.columns(2)
-        with col_t:
-            st.markdown("**Tech Alignment Breakdown:**")
-            metrics = data.get("tech_alignment_metrics") or []
-            for m in metrics:
-                cat = m.get("category", "General")
-                compat = m.get("compatibility_score", 85)
-                st.markdown(f"- **{cat}**: `{compat}% Compatible`")
-                st.caption(m.get("alignment_notes", ""))
+    with st.expander("Tech alignment & buying committee"):
+        t, p = st.columns(2)
+        with t:
+            st.markdown("**Tech alignment**")
+            for m in data.get("tech_alignment_metrics") or []:
+                progress_bar(m.get("category", "General"), m.get("compatibility_score", 0), 100, m.get("alignment_notes", ""))
+        with p:
+            st.markdown("**Buying committee**")
+            for dm in data.get("decision_makers") or []:
+                st.markdown(f"👤 **{dm.get('name')}** — *{dm.get('role_title')}*")
+                st.caption(f"Pitch angle: {dm.get('recommended_pitch_angle')}")
 
-        with col_p:
-            st.markdown("**Buying Committee Personas:**")
-            dms = data.get("decision_makers") or []
-            for dm in dms:
-                st.markdown(f"👤 **{dm.get('name')}** - *{dm.get('role_title')}*")
-                st.caption(f"Pitch Angle: {dm.get('recommended_pitch_angle')}")
-
-    # 5. Architecture Topology
-    with st.expander("📐 LangGraph Multi-Agent Architecture Topology", expanded=False):
-        st.markdown(get_architecture_diagram())
+    if get_architecture_diagram:
+        with st.expander("LangGraph agent architecture"):
+            st.markdown(get_architecture_diagram())

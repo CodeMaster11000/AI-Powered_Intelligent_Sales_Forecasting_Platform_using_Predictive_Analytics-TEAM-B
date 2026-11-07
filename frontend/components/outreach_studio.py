@@ -1,379 +1,272 @@
 import streamlit as st
 
-try:
-    from frontend.utils.api_client import (
-        fetch_lead_dossier_api,
-        fetch_scoring_queue_api,
-        generate_outreach_api,
-        save_outreach_draft_api,
-        fetch_outreach_drafts_api,
-        update_outreach_draft_api,
-        archive_outreach_draft_api,
-        delete_outreach_draft_api,
-        send_outreach_email_api,
-        fetch_llm_providers_api,
-    )
-except ModuleNotFoundError:
-    from utils.api_client import (
-        fetch_lead_dossier_api,
-        fetch_scoring_queue_api,
-        generate_outreach_api,
-        save_outreach_draft_api,
-        fetch_outreach_drafts_api,
-        update_outreach_draft_api,
-        archive_outreach_draft_api,
-        delete_outreach_draft_api,
-        send_outreach_email_api,
-        fetch_llm_providers_api,
-    )
+from frontend.components.ui import backend_error, card_title, chips, empty_state, html, page_header, pill
+from frontend.utils.api_client import (
+    archive_outreach_draft_api, delete_outreach_draft_api, fetch_llm_providers_api,
+    fetch_lead_dossier_api, fetch_outreach_drafts_api, fetch_scoring_queue_api,
+    generate_outreach_api, save_outreach_draft_api, send_outreach_email_api,
+    update_outreach_draft_api,
+)
+from frontend.utils.helpers import esc
 
-def render_outreach_studio():
-    """Renders the AI Cold Outreach Generation Studio with Multi-LLM Orchestration."""
-    
-    st.markdown(
-        """
-        <div style="margin-bottom: 16px;">
-            <h3 class="sg-title" style="font-size: 20px;">✉️ Multi-LLM AI Personalized Outreach Studio</h3>
-            <p class="sg-subtitle">Synthesize prospect intelligence, tech stack, and pain points into high-converting cold emails.</p>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+PROVIDERS = {
+    "auto": "🤖 First available provider",
+    "gemini": "✨ Google Gemini",
+    "openai": "⚡ OpenAI",
+    "grok": "🚀 xAI Grok",
+    "ollama": "🦙 Local Ollama (private)",
+}
+ANGLES = [
+    "Cloud Scale & Infrastructure Efficiency",
+    "Pipeline Variance & Forecasting ROI",
+    "Tech Stack Modernization",
+    "Operational Cost Reduction & Security",
+]
+TONES = [
+    "Consultative / Executive (Recommended)",
+    "Direct & Punchy (Under 100 words)",
+    "Problem-Centric / Metric-Driven",
+]
 
-    # 1. Fetch the authoritative queue from the backend
-    queue = fetch_scoring_queue_api()
 
-    if not queue:
-        with st.container(border=True):
-            st.error("Unable to load scored leads from the backend.")
-        return
-
-    # 2. Select target prospect
-    lead_options = {
-        f"{q['company_name']} — {q.get('contact_name', 'Contact')} ({q.get('priority', 'hot').upper()})": q["lead_id"]
-        for q in queue
+def _load_draft_into_state(item: dict, lead_id: int) -> None:
+    st.session_state["current_draft"] = {
+        "subject_options": item.get("subject_options") or [item.get("subject", "Untitled")],
+        "selected_subject": item.get("subject", ""),
+        "body": item.get("body", ""),
+        "provider_used": item.get("provider") or "Saved draft",
     }
-    
-    # Pre-select if forwarded from Scoring Hub
-    preselect_id = st.session_state.get("outreach_target_lead_id")
-    default_idx = 0
-    if preselect_id:
-        for idx, (_, lid) in enumerate(lead_options.items()):
-            if lid == preselect_id:
-                default_idx = idx
-                break
-
-    selected_label = st.selectbox("Target Prospect", options=list(lead_options.keys()), index=default_idx)
-    target_id = lead_options[selected_label]
-
-    # 3. Fetch Dossier
-    dossier = fetch_lead_dossier_api(target_id)
-    if not dossier:
-        st.error("Unable to load the AI dossier for this lead.")
-        return
-
-    # Fetch available LLM Providers for multi-model versatility
-    llm_info = fetch_llm_providers_api()
-    saved_drafts = fetch_outreach_drafts_api(target_id)
-    active_draft_id = st.session_state.get("draft_id")
-    if active_draft_id and not any(
-        item.get("id") == active_draft_id and item.get("status") == "draft"
-        for item in saved_drafts
-    ):
+    if item.get("status") == "draft":
+        st.session_state["draft_id"] = item.get("id")
+    else:
         st.session_state.pop("draft_id", None)
+    st.session_state["draft_lead_id"] = lead_id
+    st.session_state["draft_version"] = st.session_state.get("draft_version", 0) + 1
 
-    # 4. Two-Column Studio: Left Strategy (1.6) | Right Draft Editor (2.4)
-    s_col1, s_col2 = st.columns([1.6, 2.4])
 
-    # Track draft version per prospect to prevent state collision
-    if "draft_version" not in st.session_state:
-        st.session_state["draft_version"] = 0
+def _provider_status(info: dict) -> None:
+    items = []
+    for key in ("gemini", "openai", "grok", "ollama"):
+        p = info.get(key) or {}
+        items.append(pill(f"{key.title()} ✓" if p.get("available") else f"{key.title()} ✗",
+                          "teal" if p.get("available") else "slate"))
+    html("<div class='sg-chips'>" + "".join(items) + "</div>")
+    if not any((info.get(k) or {}).get("available") for k in PROVIDERS if k != "auto"):
+        html("<div style='height:6px'></div><div class='sg-callout warn'>No AI provider is configured. "
+             "Add an API key to <code>.env</code> (or run Ollama) to generate drafts.</div>")
 
-    # --- LEFT PANE: STRATEGY & LLM CONTROLS ---
-    with s_col1:
-        with st.container(border=True):
-            st.markdown("<h4 style='margin:0 0 8px 0; font-size: 15px; font-weight: 600;'>Outreach Strategy & Engine</h4>", unsafe_allow_html=True)
-            
-            # Lead Score & Priority Card
-            scoring_info = dossier.get("scoring", {})
-            sc_val = scoring_info.get("score", 0)
-            sc_prob = scoring_info.get("conversion_probability", 0)
-            sc_prio = scoring_info.get("priority", "warm").upper()
-            prio_color = "#059669" if sc_prio == "HOT" else ("#D97706" if sc_prio == "WARM" else "#64748B")
 
-            st.markdown(
-                f"""
-                <div style="background: rgba(125,125,125,0.08); border-left: 3px solid {prio_color}; padding: 8px 12px; border-radius: 4px; margin-bottom: 12px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="font-weight: 600; font-size: 13px;">Lead Score: {sc_val} / 100</span>
-                        <span style="font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: {prio_color}22; color: {prio_color};">{sc_prio} ({sc_prob}% Win Prob)</span>
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+def _strategy_panel(dossier: dict, target_id: int, saved: list[dict]) -> dict:
+    """Left column. Returns the controls so the right column can regenerate with them."""
+    scoring = dossier.get("scoring") or {}
+    prio = (scoring.get("priority") or "unscored").lower()
+    kind = {"hot": "hot", "warm": "warm", "cold": "cold"}.get(prio, "none")
+    with st.container(border=True):
+        card_title("Outreach strategy & engine")
+        win = scoring.get("conversion_probability", 0)
+        badge = pill(f"{prio.upper()} · {win}% win", kind)
+        html(
+            f"<div class='sg-callout'><div style='display:flex;justify-content:space-between;gap:8px;align-items:center'>"
+            f"<b>Lead score {esc(scoring.get('score'), 'n/a')} / 100</b>{badge}</div></div>"
+        )
+        html("<div style='height:8px'></div>")
 
-            if saved_drafts:
-                st.caption("SAVED DRAFTS")
-                draft_labels = [
-                    f"{item.get('status', 'draft').title()} · "
-                    f"{item.get('updated_at', item.get('created_at', ''))[:16]} · "
-                    f"{item.get('subject', 'Untitled')}"
-                    for item in saved_drafts
-                ]
-                selected_draft_index = st.selectbox(
-                    "Load saved draft",
-                    range(len(saved_drafts)),
-                    format_func=lambda index: draft_labels[index],
-                    label_visibility="collapsed",
-                )
-                if st.button("Load selected draft", use_container_width=True):
-                    selected_draft = saved_drafts[selected_draft_index]
-                    st.session_state["current_draft"] = {
-                        "subject_options": selected_draft.get("subject_options")
-                        or [selected_draft.get("subject", "Untitled")],
-                        "selected_subject": selected_draft.get("subject", ""),
-                        "body": selected_draft.get("body", ""),
-                        "provider_used": selected_draft.get("provider") or "Saved draft",
-                    }
-                    if selected_draft.get("status") == "draft":
-                        st.session_state["draft_id"] = selected_draft.get("id")
-                    else:
-                        st.session_state.pop("draft_id", None)
-                        st.info(
-                            "Archived and sent records are read-only. Save this as a new draft to edit it."
-                        )
-                    st.session_state["draft_lead_id"] = target_id
-                    st.session_state["draft_version"] += 1
-                    st.rerun()
-            
-            # Multi-LLM Provider Selector
-            provider_choices = {
-                "🤖 First configured provider": "auto",
-                "✨ Google Gemini (Primary Enterprise)": "gemini",
-                "⚡ OpenAI (GPT-4o-mini)": "openai",
-                "🚀 xAI Grok (grok-2-latest)": "grok",
-                "🦙 Local Ollama (llama3 Private)": "ollama",
-            }
-            selected_provider_label = st.selectbox(
-                "AI Model Provider",
-                options=list(provider_choices.keys()),
-                index=0,
-                help="Select the provider used for this generation. Failed providers fall back to the next available provider.",
-            )
-            preferred_provider_key = provider_choices[selected_provider_label]
-
-            angle = st.selectbox(
-                "Value Angle / Hook",
-                options=[
-                    "Cloud Scale & Infrastructure Efficiency",
-                    "Pipeline Variance & Forecasting ROI",
-                    "Tech Stack Modernization",
-                    "Operational Cost Reduction & Security",
-                ],
-            )
-
-            tone = st.radio(
-                "Tone & Style",
-                options=[
-                    "Consultative / Executive (Recommended)",
-                    "Direct & Punchy (Under 100 words)",
-                    "Problem-Centric / Metric-Driven",
-                ],
-            )
-
-            # Detected Context Signals
-            st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
-            st.caption("DETECTED CONTEXT SIGNALS")
-            
-            stack_list = dossier.get("tech_stack", [])
-            tech_str = ", ".join(stack_list[:3]) if stack_list else "Modern Cloud"
-            st.markdown(
-                f"""
-                <div style="font-size: 12px; margin-bottom: 4px;">✔ <strong>Tech Fit:</strong> {tech_str}</div>
-                <div style="font-size: 12px; margin-bottom: 4px;">✔ <strong>Growth Stage:</strong> {dossier.get('funding_stage', 'Growth')}</div>
-                <div style="font-size: 12px; margin-bottom: 12px;">✔ <strong>Decision Maker:</strong> {dossier.get('contact_title', 'Executive')}</div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-            custom_notes = st.text_area(
-                "Custom Rep Notes (Optional)",
-                placeholder="e.g. Mention our recent benchmark with similar SaaS teams...",
-                height=70,
-            )
-
-            if st.button("🔄 Generate / Refresh Draft", type="primary", use_container_width=True):
-                with st.spinner("AI Agent synthesizing personalized outreach..."):
-                    new_draft = generate_outreach_api(
-                        target_id,
-                        angle,
-                        tone,
-                        custom_notes,
-                        preferred_provider=preferred_provider_key,
-                    )
-                    if not new_draft:
-                        st.error("The outreach model did not produce a valid draft.")
-                        st.stop()
-                st.session_state["current_draft"] = new_draft
-                st.session_state.pop("draft_id", None)
-                st.session_state["draft_lead_id"] = target_id
-                st.session_state["draft_version"] += 1
+        if saved:
+            labels = [
+                f"{i.get('status', 'draft').title()} · {(i.get('updated_at') or i.get('created_at') or '')[:16]} · {i.get('subject', 'Untitled')}"
+                for i in saved
+            ]
+            idx = st.selectbox("Saved drafts", range(len(saved)), format_func=lambda n: labels[n])
+            if st.button("Load selected draft", width="stretch"):
+                _load_draft_into_state(saved[idx], target_id)
+                if saved[idx].get("status") != "draft":
+                    st.toast("Archived and sent drafts are read-only. Save as a new draft to edit.", icon="ℹ️")
                 st.rerun()
 
-    # --- RIGHT PANE: THE DRAFT EDITOR ---
-    with s_col2:
-        # Load the draft generated by the backend model
-        if (
-            "current_draft" not in st.session_state
-            or st.session_state.get("draft_lead_id") != target_id
-        ):
-            if saved_drafts:
-                latest = saved_drafts[0]
-                st.session_state["current_draft"] = {
-                    "subject_options": latest.get("subject_options")
-                    or [latest.get("subject", "Untitled")],
-                    "selected_subject": latest.get("subject", ""),
-                    "body": latest.get("body", ""),
-                    "provider_used": latest.get("provider") or "Saved draft",
-                }
-                if latest.get("status") == "draft":
-                    st.session_state["draft_id"] = latest.get("id")
-                else:
-                    st.session_state.pop("draft_id", None)
-                st.session_state["draft_lead_id"] = target_id
-            else:
-                live_draft = generate_outreach_api(
-                    target_id,
-                    angle,
-                    tone,
-                    custom_notes,
-                    preferred_provider=preferred_provider_key,
-                )
-                if not live_draft:
-                    st.error("The outreach model did not produce a valid draft.")
-                    return
-                st.session_state["current_draft"] = live_draft
-                st.session_state["draft_lead_id"] = target_id
+        provider_key = st.selectbox("AI model provider", list(PROVIDERS), format_func=PROVIDERS.get,
+                                    help="If the chosen provider fails, the next available one is used.")
+        angle = st.selectbox("Value angle / hook", ANGLES)
+        tone = st.radio("Tone & style", TONES)
 
-        draft = st.session_state.get("current_draft", {})
-        subject_options = draft["subject_options"]
-        provider_used = draft["provider_used"]
+        card_title("Detected context")
+        stack = dossier.get("tech_stack") or []
+        chips([f"Tech: {', '.join(map(str, stack[:3]))}" if stack else "Tech: not detected",
+               f"Stage: {dossier.get('funding_stage') or 'n/a'}",
+               f"Contact: {dossier.get('contact_title') or 'n/a'}"])
+        html("<div style='height:8px'></div>")
+        note = st.text_area("Custom rep notes (optional)", height=80,
+                            placeholder="e.g. Mention our recent benchmark with similar SaaS teams…")
 
+        with st.expander("AI provider status"):
+            _provider_status(fetch_llm_providers_api())
+
+        generate = st.button("✨ Generate draft" if "current_draft" not in st.session_state
+                             or st.session_state.get("draft_lead_id") != target_id else "🔄 Regenerate draft",
+                             type="primary", width="stretch")
+    return {"generate": generate, "provider": provider_key, "angle": angle, "tone": tone, "note": note}
+
+
+def _editor_panel(target_id: int, controls: dict) -> None:
+    draft = st.session_state.get("current_draft")
+    has_draft = draft and st.session_state.get("draft_lead_id") == target_id
+
+    if not has_draft:
         with st.container(border=True):
-            st.markdown(
-                f"""
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                    <h4 style="margin:0; font-size: 15px; font-weight: 600;">Personalized Cold Email</h4>
-                    <span style="font-size: 11px; padding: 2px 8px; border-radius: 12px; background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3);">
-                        ✨ {provider_used}
-                    </span>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+            empty_state("✉️", "No draft yet", "Choose an angle and tone, then press Generate draft. "
+                        "Nothing is sent to an AI provider until you do.")
+        return
 
-            subject_choice = st.selectbox("Subject Line Variant (A/B Test Options)", options=subject_options, index=0)
+    subject_options = draft.get("subject_options") or [draft.get("selected_subject", "Untitled")]
+    provider_used = draft.get("provider_used", "AI")
+    saved_id = st.session_state.get("draft_id")
 
-            # Editable Email Body with version-stable key
-            v_key = f"draft_body_{target_id}_{st.session_state.get('draft_version', 0)}"
-            if v_key not in st.session_state:
-                st.session_state[v_key] = draft.get("body", "")
+    with st.container(border=True):
+        html(
+            f"<div style='display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px'>"
+            f"<div class='sg-card-title' style='margin:0'>Personalized cold email</div>"
+            f"{pill('✨ ' + str(provider_used), 'info')}</div>"
+        )
+        if saved_id:
+            html(pill(f"Saved draft #{saved_id}", "teal"))
+        default_idx = subject_options.index(draft["selected_subject"]) if draft.get("selected_subject") in subject_options else 0
+        subject = st.selectbox("Subject line (A/B variants)", subject_options, index=default_idx)
 
-            edited_body = st.text_area("Email Body", value=st.session_state[v_key], height=240, key=f"widget_{v_key}")
+        v_key = f"draft_body_{target_id}_{st.session_state.get('draft_version', 0)}"
+        if v_key not in st.session_state:
+            st.session_state[v_key] = draft.get("body", "")
+        body = st.text_area("Email body", height=260, key=v_key)
 
-            # Personalization Triggers Pills
-            triggers = draft.get("personalization_triggers", [])
-            if triggers:
-                trigger_pills = " ".join([f"<span style='background: rgba(16, 185, 129, 0.12); color: #34d399; padding: 2px 6px; border-radius: 4px; font-size: 11px; margin-right: 4px;'>🎯 {t}</span>" for t in triggers])
-                st.markdown(f"<div style='margin-bottom: 8px;'>{trigger_pills}</div>", unsafe_allow_html=True)
+        if draft.get("personalization_triggers"):
+            chips([f"🎯 {t}" for t in draft["personalization_triggers"]], "teal")
 
-            reading_time = draft.get("reading_time_seconds", max(10, round(len(edited_body.split()) / 3.5)))
-            hook_score = draft.get("hook_score", 92)
+        words = len(body.split())
+        read_s = max(10, round(words / 3.5))
+        hook = draft.get("hook_score")
+        html(
+            "<div class='sg-info-grid' style='margin:12px 0'>"
+            f"<div class='sg-info'><span class='sg-eyebrow'>Hook score</span><b>{esc(f'{hook} / 100' if hook is not None else 'n/a')}</b></div>"
+            f"<div class='sg-info'><span class='sg-eyebrow'>Words</span><b>{words}</b></div>"
+            f"<div class='sg-info'><span class='sg-eyebrow'>Reading time</span><b>~{read_s}s</b></div>"
+            f"<div class='sg-info'><span class='sg-eyebrow'>Call to action</span><b>{esc(draft.get('call_to_action'))}</b></div></div>"
+        )
+        if not body.strip():
+            st.warning("The email body is empty.")
 
-            st.markdown(
-                f"""
-                <div style="display: flex; justify-content: space-between; font-size: 12px; opacity: 0.8; margin: 8px 0 16px 0;">
-                    <span>Hook Score: <strong style="color: {'#34d399' if hook_score >= 90 else '#60a5fa'};">{hook_score} / 100</strong></span>
-                    <span>Word Count: <strong>{len(edited_body.split())} words</strong></span>
-                    <span>Reading Time: <strong>~{reading_time}s</strong></span>
-                    <span>CTA: <strong>{draft.get('call_to_action', '5-min review')}</strong></span>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+        c1, c2, c3 = st.columns([1.3, 1.3, 1.6])
+        with c1:
+            with st.popover("📋 View / copy", width="stretch"):
+                st.caption("Use the copy icon at the top-right of the block.")
+                st.code(f"Subject: {subject}\n\n{body}", language="markdown")
+        with c2:
+            if st.button("💾 Save draft", width="stretch", disabled=not body.strip()):
+                if saved_id:
+                    ok, msg = update_outreach_draft_api(saved_id, subject, body)
+                else:
+                    ok, msg = save_outreach_draft_api(target_id, subject, body, {
+                        "provider": provider_used, "angle": controls["angle"], "tone": controls["tone"],
+                        "custom_note": controls["note"], "subject_options": subject_options})
+                    if ok:
+                        match = next((d for d in fetch_outreach_drafts_api(target_id)
+                                      if d.get("status") == "draft" and d.get("subject") == subject and d.get("body") == body), None)
+                        if match:
+                            st.session_state["draft_id"] = match.get("id")
+                st.toast(msg, icon="💾" if ok else "⚠️")
+        with c3:
+            confirm_key = f"confirm_send_{target_id}"
+            if st.button("🚀 Send email", type="primary", width="stretch", disabled=not body.strip()):
+                st.session_state[confirm_key] = True
 
-            # Action Buttons
-            a1, a2, a3 = st.columns([1.5, 1.5, 2])
-            with a1:
-                with st.popover("📋 View / Copy", use_container_width=True):
-                    st.caption("Copy email content below:")
-                    st.code(f"Subject: {subject_choice}\n\n{edited_body}", language="markdown")
+        if st.session_state.get(confirm_key):
+            html("<div class='sg-callout warn'><b>Send this email now?</b> This logs the interaction and cannot be undone.</div>")
+            y, n = st.columns(2)
+            if y.button("Yes, send", type="primary", width="stretch", key=f"send_yes_{target_id}"):
+                ok, msg = send_outreach_email_api(target_id, subject, body, saved_id)
+                st.session_state.pop(confirm_key, None)
+                st.toast(msg, icon="🚀" if ok else "⚠️")
+                st.rerun()
+            if n.button("Cancel", width="stretch", key=f"send_no_{target_id}"):
+                st.session_state.pop(confirm_key, None)
+                st.rerun()
 
-            with a2:
-                if st.button("💾 Save as Draft", use_container_width=True):
-                    draft_id = st.session_state.get("draft_id")
-                    if draft_id:
-                        success, msg = update_outreach_draft_api(
-                            draft_id, subject_choice, edited_body
-                        )
-                    else:
-                        success, msg = save_outreach_draft_api(
-                            target_id,
-                            subject_choice,
-                            edited_body,
-                            {
-                                "provider": provider_used,
-                                "angle": angle,
-                                "tone": tone,
-                                "custom_note": custom_notes,
-                                "subject_options": subject_options,
-                            },
-                        )
-                    st.toast(msg, icon="💾")
-                    if success and not draft_id:
-                        persisted = fetch_outreach_drafts_api(target_id)
-                        saved = next(
-                            (
-                                item
-                                for item in persisted
-                                if item.get("status") == "draft"
-                                and item.get("subject") == subject_choice
-                                and item.get("body") == edited_body
-                            ),
-                            None,
-                        )
-                        if saved:
-                            st.session_state["draft_id"] = saved.get("id")
+        if saved_id:
+            html("<div style='height:4px'></div>")
+            a, d, _ = st.columns([1, 1, 2.2])
+            if a.button("🗄️ Archive", width="stretch"):
+                ok, msg = archive_outreach_draft_api(saved_id)
+                st.toast(msg, icon="🗄️" if ok else "⚠️")
+                if ok:
+                    st.session_state.pop("draft_id", None)
+                    st.session_state.pop("current_draft", None)
+                    st.rerun()
+            if d.button("🗑️ Delete", width="stretch"):
+                ok, msg = delete_outreach_draft_api(saved_id)
+                st.toast(msg, icon="🗑️" if ok else "⚠️")
+                if ok:
+                    st.session_state.pop("draft_id", None)
+                    st.session_state.pop("current_draft", None)
+                    st.rerun()
 
-            if st.session_state.get("draft_id"):
-                with a1:
-                    if st.button("Archive", use_container_width=True):
-                        success, msg = archive_outreach_draft_api(
-                            st.session_state["draft_id"]
-                        )
-                        st.toast(msg, icon="🗄️")
-                        if success:
-                            st.session_state.pop("draft_id", None)
-                            st.session_state.pop("current_draft", None)
-                            st.rerun()
-                with a2:
-                    if st.button("Delete", use_container_width=True):
-                        success, msg = delete_outreach_draft_api(
-                            st.session_state["draft_id"]
-                        )
-                        st.toast(msg, icon="🗑️" if success else "⚠️")
-                        if success:
-                            st.session_state.pop("draft_id", None)
-                            st.session_state.pop("current_draft", None)
-                            st.rerun()
 
-            with a3:
-                if st.button("🚀 Send Email", type="primary", use_container_width=True):
-                    success, msg = send_outreach_email_api(
-                        target_id,
-                        subject_choice,
-                        edited_body,
-                        st.session_state.get("draft_id"),
-                    )
-                    st.toast(msg, icon="🚀" if success else "⚠️")
+def render_outreach_studio() -> None:
+    page_header("AI Outreach Studio", "Turn prospect intelligence into a personalized cold email you can edit, save and send.")
+
+    queue = fetch_scoring_queue_api()
+    if queue is None:
+        with st.container(border=True):
+            backend_error("leads")
+        return
+    if not queue:
+        with st.container(border=True):
+            empty_state("✉️", "No leads available", "Add and score a lead before drafting outreach.")
+        return
+
+    labels = {f"{q['company_name']} — {q.get('contact_name', 'Contact')} ({str(q.get('priority', 'unscored')).upper()})": q["lead_id"]
+              for q in queue}
+    ids = list(labels.values())
+    preselect = st.session_state.pop("outreach_target_lead_id", None)
+    if preselect in ids:
+        st.session_state["outreach_target_select"] = list(labels)[ids.index(preselect)]
+    if st.session_state.get("outreach_target_select") not in labels:
+        st.session_state["outreach_target_select"] = next(iter(labels))
+    label = st.selectbox("Target prospect", list(labels), key="outreach_target_select")
+    target_id = labels[label]
+
+    dossier = fetch_lead_dossier_api(target_id)
+    if not dossier:
+        with st.container(border=True):
+            backend_error("the AI dossier for this lead")
+        return
+
+    saved = fetch_outreach_drafts_api(target_id)
+    active = st.session_state.get("draft_id")
+    if active and not any(i.get("id") == active and i.get("status") == "draft" for i in saved):
+        st.session_state.pop("draft_id", None)
+
+    # Opening a lead that already has drafts shows the latest one. Nothing is generated automatically.
+    if st.session_state.get("draft_lead_id") != target_id:
+        st.session_state.pop("current_draft", None)
+        st.session_state.pop("draft_id", None)
+        if saved:
+            _load_draft_into_state(saved[0], target_id)
+
+    left, right = st.columns([1.4, 2.6])
+    with left:
+        controls = _strategy_panel(dossier, target_id, saved)
+
+    if controls["generate"]:
+        with right:
+            with st.spinner("AI agent is writing your outreach…"):
+                ok, result = generate_outreach_api(target_id, controls["angle"], controls["tone"],
+                                                   controls["note"], controls["provider"])
+        if ok and isinstance(result, dict):
+            st.session_state["current_draft"] = result
+            st.session_state.pop("draft_id", None)
+            st.session_state["draft_lead_id"] = target_id
+            st.session_state["draft_version"] = st.session_state.get("draft_version", 0) + 1
+            st.rerun()
+        with right:
+            st.error(f"The outreach model did not produce a draft: {result}")
+        return
+
+    with right:
+        _editor_panel(target_id, controls)
