@@ -1,21 +1,15 @@
 import io
+import re
 import pandas as pd
 import streamlit as st
 
-try:
-    from frontend.utils.api_client import bulk_import_api, fetch_users
-    from frontend.utils.csv_parser import (
-        TARGET_SCHEMA_FIELDS,
-        auto_match_column,
-        generate_sample_csv,
-    )
-except ModuleNotFoundError:
-    from utils.api_client import bulk_import_api, fetch_users
-    from utils.csv_parser import (
-        TARGET_SCHEMA_FIELDS,
-        auto_match_column,
-        generate_sample_csv,
-    )
+from frontend.components.ui import html
+from frontend.utils.api_client import bulk_import_api, fetch_users
+from frontend.utils.csv_parser import TARGET_SCHEMA_FIELDS, auto_match_column, generate_sample_csv
+from frontend.utils.helpers import esc
+
+EMAIL_RE = re.compile(r"^[\w.+-]+@[\w-]+(\.[\w-]+)+$")
+MAX_ROWS = 5000
 
 
 def clean_cell(raw_value) -> str | None:
@@ -48,11 +42,11 @@ def render_csv_uploader():
                 data=generate_sample_csv(),
                 file_name="salesgenie_prospect_template.csv",
                 mime="text/csv",
-                use_container_width=True,
+                width="stretch",
             )
 
         with t_col3:
-            if st.button("⚡ Load Demo Batch (3 Leads)", use_container_width=True):
+            if st.button("⚡ Load Demo Batch (3 Leads)", width="stretch"):
                 st.session_state["demo_active"] = True
 
         st.markdown("<div style='margin-top: 8px;'></div>", unsafe_allow_html=True)
@@ -84,17 +78,16 @@ def render_csv_uploader():
 
         # Active Data Mapping State
         row_count = len(df)
-        st.markdown(
-            f"""
-            <div class="sg-file-banner">
-                <div style="font-size: 13px; font-weight: 600;">
-                    📄 File Loaded: <code>{file_display_name}</code> ({row_count} prospect rows detected)
-                </div>
-                <span class="sg-pill sg-pill-teal">Ready for Mapping</span>
-            </div>
-            """,
-            unsafe_allow_html=True,
+        if row_count > MAX_ROWS:
+            st.error(f"This file has {row_count:,} rows. Please split it into files of at most {MAX_ROWS:,} rows.")
+            return
+        html(
+            f"<div class='sg-callout' style='display:flex;justify-content:space-between;gap:10px;align-items:center'>"
+            f"<span>📄 <b>{esc(file_display_name)}</b> — {row_count} prospect rows detected</span>"
+            f"<span class='sg-pill sg-pill-teal'>Ready for mapping</span></div>"
         )
+        with st.expander("Preview first 5 rows"):
+            st.dataframe(df.head(), width="stretch", hide_index=True)
 
         st.markdown("<h5 style='font-size: 14px; font-weight: 600; margin: 12px 0 2px 0;'>Smart Column Mapping</h5>", unsafe_allow_html=True)
         st.caption("Confirm detected CSV columns against database fields. Required fields marked (*).")
@@ -130,7 +123,7 @@ def render_csv_uploader():
                 target_str = key_to_option[guessed_key]
                 default_index = target_options.index(target_str)
 
-            c1.markdown(f"<div style='padding-top: 8px; font-size: 13px; font-weight: 500;'>{col_name}</div>", unsafe_allow_html=True)
+            c1.markdown(f"<div style='padding-top: 8px; font-size: 13px; font-weight: 500;'>{esc(col_name)}</div>", unsafe_allow_html=True)
 
             selected_option = c2.selectbox(
                 f"Map {col_name}",
@@ -141,7 +134,7 @@ def render_csv_uploader():
             )
 
             c3.markdown(
-                f"<div style='padding-top: 8px; opacity: 0.8; font-family: monospace; font-size: 12px;'>{sample_display}</div>",
+                f"<div style='padding-top: 8px; opacity: 0.8; font-family: monospace; font-size: 12px;'>{esc(sample_display)}</div>",
                 unsafe_allow_html=True,
             )
 
@@ -169,7 +162,20 @@ def render_csv_uploader():
 
         with val_col1:
             if has_company and has_email:
-                st.success(f"✓ Mandatory fields (`company_name` & `email`) verified across all {row_count} rows.")
+                email_series = df[target_to_col["email"]].map(clean_cell)
+                missing_email = int(email_series.isna().sum())
+                bad_email = int(email_series.dropna().map(lambda e: not EMAIL_RE.match(e)).sum())
+                dup_in_file = int(email_series.dropna().str.lower().duplicated().sum())
+                st.success("✓ Company name and email are mapped.")
+                issues = []
+                if missing_email:
+                    issues.append(f"{missing_email} row(s) have no email and will be skipped")
+                if bad_email:
+                    issues.append(f"{bad_email} email(s) look invalid and may be rejected by the server")
+                if dup_in_file:
+                    issues.append(f"{dup_in_file} duplicate email(s) inside this file")
+                for issue in issues:
+                    st.warning(issue)
             else:
                 missing = []
                 if not has_company:
@@ -200,7 +206,7 @@ def render_csv_uploader():
         btn_col1, btn_col2, btn_col3 = st.columns([4, 1.5, 2.5])
 
         with btn_col2:
-            if st.button("Reset File", use_container_width=True):
+            if st.button("Reset File", width="stretch"):
                 st.session_state["demo_active"] = False
                 st.rerun()
 
@@ -209,7 +215,7 @@ def render_csv_uploader():
             if st.button(
                 f"⚡ Import & Commit {row_count} Leads",
                 type="primary",
-                use_container_width=True,
+                width="stretch",
                 disabled=not ready,
             ):
                 leads_to_post = []

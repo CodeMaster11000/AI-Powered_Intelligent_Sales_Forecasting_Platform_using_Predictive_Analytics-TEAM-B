@@ -1,13 +1,18 @@
 [theme]
 base = "dark"
 primaryColor = "#2DD4BF"
-backgroundColor = "#101827"
-secondaryBackgroundColor = "#172235"
+backgroundColor = "#0E1626"
+secondaryBackgroundColor = "#162238"
 textColor = "#F4F7FB"
 font = "sans serif"
 
 [client]
 toolbarMode = "minimal"
+showErrorDetails = false
+
+[server]
+maxUploadSize = 10
+enableXsrfProtection = true
 
 [browser]
 gatherUsageStats = false

@@ -11,5 +11,5 @@ python-multipart
 httpx
 requests
 pandas
-streamlit
+streamlit>=1.50
 email-validator

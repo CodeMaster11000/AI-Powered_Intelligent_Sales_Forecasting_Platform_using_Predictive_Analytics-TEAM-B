@@ -2,10 +2,9 @@ import io
 import pandas as pd
 import streamlit as st
 
-try:
-    from frontend.utils.api_client import delete_lead_api, fetch_leads_api, update_lead_api
-except ModuleNotFoundError:
-    from utils.api_client import delete_lead_api, fetch_leads_api, update_lead_api
+from frontend.components.ui import empty_state, html
+from frontend.utils.api_client import delete_lead_api, fetch_leads_api, update_lead_api
+from frontend.utils.helpers import esc
 
 
 LEAD_STATUSES = ["New Leads", "Qualified", "Proposal", "Negotiation", "Closed Won"]
@@ -14,18 +13,9 @@ SOURCES = ["Sales Entry", "LinkedIn", "Website Form", "CRM", "CSV"]
 
 def render_staging_feed():
     """Renders Wireframe 3: Live database lead feed with search, filtering, and export."""
-    st.markdown(
-        """
-        <div style="margin-top: 20px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: flex-end;">
-            <div>
-                <h3 class="sg-title" style="font-size: 18px;">Recently Ingested Leads</h3>
-                <p class="sg-subtitle" style="font-size: 13px;">
-                    Verified prospect records stored in PostgreSQL, ready for AI qualification and scoring.
-                </p>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    html(
+        "<div style='margin:22px 0 10px'><h3 class='sg-title' style='font-size:18px'>Lead database</h3>"
+        "<p class='sg-subtitle'>Prospect records stored in PostgreSQL, ready for AI qualification and scoring.</p></div>"
     )
 
     with st.container(border=True):
@@ -50,8 +40,12 @@ def render_staging_feed():
         # 1. Fetch live from FastAPI backend
         records = fetch_leads_api(search=search_query, source=selected_source)
 
-        # 2. Fall back to local session state if backend is offline or returned empty
-        if not records:
+        # 2. Only when the backend is unreachable (None) fall back to this session's local leads.
+        backend_down = records is None
+        if backend_down:
+            records = []
+            st.caption("⚠️ Backend unreachable — showing leads added during this browser session only.")
+        if backend_down:
             session_leads = st.session_state.get("recent_ingested_leads", [])
             if session_leads:
                 records = session_leads
@@ -77,29 +71,18 @@ def render_staging_feed():
                     data=csv_buffer.getvalue(),
                     file_name="salesgenie_leads_export.csv",
                     mime="text/csv",
-                    use_container_width=True,
+                    width="stretch",
                 )
             else:
-                st.button("⬇️ Export CSV", disabled=True, use_container_width=True)
+                st.button("⬇️ Export CSV", disabled=True, width="stretch")
 
         with f_col4:
-            if st.button("🔄", use_container_width=True, help="Refresh database feed"):
+            if st.button("🔄", width="stretch", help="Refresh database feed"):
                 st.rerun()
 
         # Empty State
         if not records:
-            st.markdown(
-                """
-                <div style="text-align: center; padding: 28px 16px;">
-                    <div style="font-size: 28px; margin-bottom: 6px;">📋</div>
-                    <div style="font-size: 14px; font-weight: 600;">No matching leads in database</div>
-                    <div style="font-size: 12px; opacity: 0.7; margin-top: 4px;">
-                        Upload a CSV in Tab 1 or save a single lead in Tab 2 to populate the database.
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+            empty_state("📋", "No matching leads", "Upload a CSV or save a single lead above to populate the database.")
             return
 
         # Prepare DataFrame for presentation
@@ -116,15 +99,7 @@ def render_staging_feed():
             df["contact_name"] = df["contact_name"].fillna("—")
 
         # Status Summary Bar
-        st.markdown(
-            f"""
-            <div style="display: flex; gap: 10px; margin: 10px 0; font-size: 12px;">
-                <span class="sg-pill sg-pill-teal">Total Results: {len(df)}</span>
-                <span class="sg-pill sg-pill-slate">Active Pipeline Stage: New Leads</span>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        html(f"<div class='sg-chips' style='margin:10px 0'><span class='sg-pill sg-pill-teal'>{len(df)} result{'s' if len(df) != 1 else ''}</span></div>")
 
         # Data Table with safe column mapping
         column_configs = {
@@ -146,7 +121,7 @@ def render_staging_feed():
 
         st.dataframe(
             df,
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             column_config=column_configs,
         )
@@ -160,7 +135,7 @@ def render_staging_feed():
         if not lead_options:
             return
 
-        st.markdown("#### Manage lead")
+        html("<div class='sg-card-title' style='margin-top:14px'>Manage lead</div>")
         selected_label = st.selectbox(
             "Select a lead to edit or delete",
             options=list(lead_options),

@@ -1,10 +1,7 @@
 import re
 import streamlit as st
 
-try:
-    from frontend.utils.api_client import create_lead_api, fetch_users, score_lead_api
-except ModuleNotFoundError:
-    from utils.api_client import create_lead_api, fetch_users, score_lead_api
+from frontend.utils.api_client import create_lead_api, fetch_users, score_lead_api
 
 # Schema constraints matching backend/database/models/leads.py
 LEAD_STATUSES = ["New Leads", "Qualified", "Proposal", "Negotiation", "Closed Won"]
@@ -19,7 +16,7 @@ COMMON_TECH_STACK = [
 
 def is_valid_email(email: str) -> bool:
     """Basic email validator."""
-    pattern = r"^[\w\.-]+@[\w\.-]+\.\w+$"
+    pattern = r"^[\w.+-]+@[\w-]+(\.[\w-]+)+$"
     return re.match(pattern, email.strip()) is not None
 
 
@@ -150,7 +147,7 @@ def render_manual_form():
     b_col1, b_col2, b_col3, b_col4 = st.columns([4, 1.5, 2, 2.5])
 
     with b_col2:
-        if st.button("Reset Form", use_container_width=True, type="secondary"):
+        if st.button("Reset Form", width="stretch", type="secondary"):
             st.session_state["manual_form_version"] += 1
             st.rerun()
 
@@ -188,7 +185,7 @@ def render_manual_form():
         }
 
     with b_col3:
-        if st.button("💾 Save & Add Another", use_container_width=True, type="secondary"):
+        if st.button("💾 Save & Add Another", width="stretch", type="secondary"):
             payload = build_lead_payload()
             if payload:
                 success, result = create_lead_api(payload)
@@ -202,13 +199,13 @@ def render_manual_form():
                         st.session_state.setdefault("recent_ingested_leads", []).insert(0, payload)
                         st.session_state["session_additions"] += 1
                         st.session_state["manual_form_version"] += 1
-                        st.warning(f"Backend offline: Saved {payload['company_name']} in local session.")
+                        st.toast(f"Backend offline: kept {payload['company_name']} in this browser session only.", icon="⚠️")
                         st.rerun()
                     else:
                         st.error(f"Error: {result}")
 
     with b_col4:
-        if st.button("⚡ Save & Queue for Scoring", use_container_width=True, type="primary"):
+        if st.button("⚡ Save & Queue for Scoring", width="stretch", type="primary"):
             payload = build_lead_payload()
             if payload:
                 success, result = create_lead_api(payload)
@@ -224,12 +221,10 @@ def render_manual_form():
                     st.rerun()
                 else:
                     if "Backend is offline" in str(result):
-                        payload["score"] = 72
-                        payload["priority"] = "warm"
                         st.session_state.setdefault("recent_ingested_leads", []).insert(0, payload)
                         st.session_state["session_additions"] += 1
                         st.session_state["manual_form_version"] += 1
-                        st.warning(f"Backend offline: Staged {payload['company_name']} in local session.")
+                        st.toast(f"Backend offline: kept {payload['company_name']} in this browser session only (not scored).", icon="⚠️")
                         st.rerun()
                     else:
                         st.error(f"Error: {result}")
