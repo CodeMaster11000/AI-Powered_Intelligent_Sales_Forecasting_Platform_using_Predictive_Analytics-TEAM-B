@@ -181,3 +181,24 @@ class DraftResponse(BaseModel):
     archived_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class CRMConnectionTestResponse(BaseModel):
+    provider: Literal["hubspot", "salesforce"]
+    connected: bool
+    contact_count_sample: int | None = None
+    lead_count_sample: int | None = None
+    object_type: str | None = None
+
+
+class CRMSyncRequest(BaseModel):
+    max_records: int = Field(default=100, ge=1, le=5000)
+
+
+class CRMSyncResponse(BaseModel):
+    sync_run_id: str
+    status: Literal["succeeded", "partial"]
+    records_read: int
+    records_created: int
+    records_updated: int
+    records_failed: int
