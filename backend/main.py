@@ -13,6 +13,11 @@ from backend.database.models.lead_analysis_runs import LeadAnalysisRun
 from backend.database.models.leads import Lead
 from backend.database.models.outreach_emails import OutreachEmail
 from backend.database.models.users import User
+from backend.crm.hubspot_client import HubSpotAPIError, build_hubspot_client
+from backend.crm.salesforce_client import (
+    SalesforceAPIError,
+    build_salesforce_client,
+)
 from backend.schema import (
     BulkLeadImportRequest,
     BulkLeadImportResponse,
@@ -28,6 +33,9 @@ from backend.schema import (
     DraftCreateRequest,
     DraftResponse,
     DraftUpdateRequest,
+    CRMConnectionTestResponse,
+    CRMSyncRequest,
+    CRMSyncResponse,
 )
 from modules.module1_leads import (
     bulk_import_leads,
@@ -47,6 +55,12 @@ from modules.module2_intelligence import (
 )
 from modules.module3_outreach import generate_personalized_email
 from modules.module4_scoring import generate_next_best_action
+from modules.module5_crm import (
+    sync_hubspot_contacts,
+    sync_salesforce_leads,
+    test_hubspot_connection,
+    test_salesforce_connection,
+)
 
 app = FastAPI(title="SalesGenie AI Core API", version="1.0.0")
 
@@ -63,6 +77,70 @@ app.add_middleware(
 @app.get("/health", tags=["System"])
 def health_check():
     return {"status": "healthy", "service": "salesgenie-api"}
+
+
+@app.post(
+    "/api/crm/hubspot/test",
+    response_model=CRMConnectionTestResponse,
+    tags=["CRM"],
+)
+def test_hubspot():
+    try:
+        with build_hubspot_client() as client:
+            result = test_hubspot_connection(client)
+        return {"provider": "hubspot", **result}
+    except HubSpotAPIError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.post(
+    "/api/crm/hubspot/sync",
+    response_model=CRMSyncResponse,
+    tags=["CRM"],
+)
+def sync_hubspot(req: CRMSyncRequest, db: Session = Depends(get_db)):
+    try:
+        with build_hubspot_client() as client:
+            return sync_hubspot_contacts(db, client, max_records=req.max_records)
+    except HubSpotAPIError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.post(
+    "/api/crm/salesforce/test",
+    response_model=CRMConnectionTestResponse,
+    tags=["CRM"],
+)
+def test_salesforce():
+    try:
+        with build_salesforce_client() as client:
+            result = test_salesforce_connection(client)
+        return {"provider": "salesforce", **result}
+    except SalesforceAPIError as exc:
+        response_status = exc.status_code if exc.status_code == 424 else 502
+        raise HTTPException(status_code=response_status, detail=str(exc)) from exc
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.post(
+    "/api/crm/salesforce/sync",
+    response_model=CRMSyncResponse,
+    tags=["CRM"],
+)
+def sync_salesforce(req: CRMSyncRequest, db: Session = Depends(get_db)):
+    try:
+        with build_salesforce_client() as client:
+            return sync_salesforce_leads(db, client, max_records=req.max_records)
+    except SalesforceAPIError as exc:
+        response_status = exc.status_code if exc.status_code == 424 else 502
+        raise HTTPException(status_code=response_status, detail=str(exc)) from exc
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @app.get("/api/users", response_model=list[UserResponse], tags=["Users"])
