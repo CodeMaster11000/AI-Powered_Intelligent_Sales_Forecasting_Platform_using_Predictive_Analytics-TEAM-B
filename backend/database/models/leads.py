@@ -12,6 +12,8 @@ if TYPE_CHECKING:
     from backend.database.models.lead_analysis_runs import LeadAnalysisRun
     from backend.database.models.lead_scores import LeadScore
     from backend.database.models.outreach_emails import OutreachEmail
+    from backend.database.models.crm_records import CRMRecord
+    from backend.database.models.sales_interactions import SalesInteraction
     from backend.database.models.users import User
 
 
@@ -70,4 +72,10 @@ class Lead(Base):
     )
     outreach_emails: Mapped[list["OutreachEmail"]] = relationship(
         back_populates="lead", cascade="all, delete-orphan", passive_deletes=True
+    )
+    crm_records: Mapped[list["CRMRecord"]] = relationship(
+        back_populates="lead", passive_deletes=True
+    )
+    sales_interactions: Mapped[list["SalesInteraction"]] = relationship(
+        back_populates="lead", passive_deletes=True
     )
