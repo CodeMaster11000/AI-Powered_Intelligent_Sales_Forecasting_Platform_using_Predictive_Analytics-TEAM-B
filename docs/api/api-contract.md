@@ -89,6 +89,10 @@ conversion probability as `lead_score * 0.85`, capped to `0..100`.
 | `POST` | `/api/outreach/save-draft` | Outreach | Acknowledge a draft save | `200` |
 | `POST` | `/api/outreach/send` | Outreach | Acknowledge send and advance lead stage | `200` |
 | `GET` | `/api/llm/providers` | AI Engine | Report configured provider availability | `200` |
+| `POST` | `/api/crm/hubspot/test` | CRM | Validate the configured HubSpot token and CRM access | `200` |
+| `POST` | `/api/crm/hubspot/sync` | CRM | Pull HubSpot contacts and upsert local leads/CRM identities | `200` |
+| `POST` | `/api/crm/salesforce/test` | CRM | Validate Salesforce client-credentials access and supported object | `200` |
+| `POST` | `/api/crm/salesforce/sync` | CRM | Pull Salesforce Leads or Contacts and upsert local leads/CRM identities | `200` |
 
 ## 4. System and users
 
