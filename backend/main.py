@@ -36,6 +36,8 @@ from backend.schema import (
     CRMConnectionTestResponse,
     CRMSyncRequest,
     CRMSyncResponse,
+    InteractionSummarizeRequest,
+    SalesInteractionResponse,
 )
 from modules.module1_leads import (
     bulk_import_leads,
@@ -60,6 +62,12 @@ from modules.module5_crm import (
     sync_salesforce_leads,
     test_hubspot_connection,
     test_salesforce_connection,
+)
+from modules.module5_conversation import (
+    summarize_and_store_interaction,
+    get_lead_interactions,
+    get_interaction_by_id,
+    list_interactions,
 )
 
 app = FastAPI(title="SalesGenie AI Core API", version="1.0.0")
@@ -650,3 +658,90 @@ def send_outreach_email(req: SendOutreachRequest, db: Session = Depends(get_db))
 def get_llm_providers():
     from backend.ai_agents.llm_client import llm_client
     return llm_client.get_available_providers()
+
+
+# --- CONVERSATION INTELLIGENCE & INTERACTION SUMMARIZATION (MODULE 5) ---
+@app.post(
+    "/api/interactions/summarize",
+    response_model=SalesInteractionResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["Conversation Intelligence"],
+)
+def summarize_interaction_endpoint(
+    req: InteractionSummarizeRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Analyzes meeting/call transcripts using the Multi-LLM Conversation Agent,
+    extracts summary, discussion points, action items, risks, and next steps,
+    and commits the record to the sales_interactions repository.
+    """
+    if req.lead_id is not None:
+        lead = db.get(Lead, req.lead_id)
+        if not lead:
+            raise HTTPException(status_code=404, detail=f"Lead with id {req.lead_id} not found")
+
+    try:
+        interaction = summarize_and_store_interaction(
+            db=db,
+            transcript_text=req.transcript_text,
+            lead_id=req.lead_id,
+            interaction_type=req.interaction_type,
+            subject=req.subject,
+            occurred_at=req.occurred_at,
+            connection_id=req.connection_id,
+            provider_activity_id=req.provider_activity_id,
+            preferred_provider=req.preferred_provider,
+        )
+        return interaction
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Conversation summarization failed: {str(e)}")
+
+
+@app.get(
+    "/api/leads/{lead_id}/interactions",
+    response_model=list[SalesInteractionResponse],
+    tags=["Conversation Intelligence"],
+)
+def get_lead_interactions_endpoint(
+    lead_id: int,
+    db: Session = Depends(get_db),
+):
+    """Returns all summarized sales interactions and call logs for a specific lead."""
+    lead = db.get(Lead, lead_id)
+    if not lead:
+        raise HTTPException(status_code=404, detail=f"Lead with id {lead_id} not found")
+    return get_lead_interactions(db, lead_id)
+
+
+@app.get(
+    "/api/interactions",
+    response_model=list[SalesInteractionResponse],
+    tags=["Conversation Intelligence"],
+)
+def list_interactions_endpoint(
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    interaction_type: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Returns paginated list of all summarized sales interactions across all accounts."""
+    return list_interactions(db, limit=limit, offset=offset, interaction_type=interaction_type)
+
+
+@app.get(
+    "/api/interactions/{interaction_id}",
+    response_model=SalesInteractionResponse,
+    tags=["Conversation Intelligence"],
+)
+def get_interaction_details_endpoint(
+    interaction_id: int,
+    db: Session = Depends(get_db),
+):
+    """Returns detailed summary, action items, risks, and audit metrics for an interaction."""
+    interaction = get_interaction_by_id(db, interaction_id)
+    if not interaction:
+        raise HTTPException(status_code=404, detail=f"Interaction with id {interaction_id} not found")
+    return interaction
