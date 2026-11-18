@@ -240,3 +240,54 @@ def fetch_lead_insights_api(lead_id: int) -> dict | None:
 
 def analyze_prospect_ad_hoc_api(payload: dict) -> tuple[bool, dict | str]:
     return _write("POST", "/api/intelligence/analyze-prospect", json=payload, timeout=300.0)
+
+
+# ---------------------------- CRM & Calls ------------------------------- #
+def fetch_crm_records_api(provider: str | None = None, search: str | None = None) -> list[dict] | None:
+    params: dict[str, str] = {}
+    if provider and provider != "All providers":
+        params["provider"] = provider
+    if search and search.strip():
+        params["search"] = search.strip()
+    return _safe_get("/api/crm/records", params)
+
+
+def test_crm_connection_api(provider: str) -> tuple[bool, dict | str]:
+    return _write("POST", f"/api/crm/{provider}/test", timeout=15.0)
+
+
+def sync_crm_api(provider: str, max_records: int = 100) -> tuple[bool, dict | str]:
+    return _write("POST", f"/api/crm/{provider}/sync",
+                  json={"max_records": max_records}, timeout=60.0)
+
+
+def push_lead_crm_api(lead_id: int, provider: str) -> tuple[bool, dict | str]:
+    return _write("POST", f"/api/leads/{lead_id}/crm/{provider}/sync", timeout=30.0)
+
+
+def fetch_interactions_api(limit: int = 100, interaction_type: str | None = None) -> list[dict] | None:
+    params: dict[str, object] = {"limit": limit}
+    if interaction_type and interaction_type != "All types":
+        params["interaction_type"] = interaction_type
+    return _safe_get("/api/interactions", params)
+
+
+def fetch_lead_interactions_api(lead_id: int) -> list[dict] | None:
+    return _safe_get(f"/api/leads/{lead_id}/interactions")
+
+
+def summarize_interaction_api(
+    transcript_text: str,
+    lead_id: int | None = None,
+    interaction_type: str = "meeting",
+    subject: str | None = None,
+    preferred_provider: str | None = None,
+) -> tuple[bool, dict | str]:
+    payload = {
+        "transcript_text": transcript_text,
+        "lead_id": lead_id,
+        "interaction_type": interaction_type,
+        "subject": subject or None,
+        "preferred_provider": preferred_provider or None,
+    }
+    return _write("POST", "/api/interactions/summarize", json=payload, timeout=300.0)

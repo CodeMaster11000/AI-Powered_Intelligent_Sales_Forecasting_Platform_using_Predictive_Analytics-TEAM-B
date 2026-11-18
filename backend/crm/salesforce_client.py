@@ -147,6 +147,21 @@ class SalesforceClient:
             records.extend(page.records)
         return records[:max_records]
 
+    def update_record(
+        self, object_type: str, record_id: str, fields: dict[str, Any]
+    ) -> dict[str, Any]:
+        if object_type not in {"Lead", "Contact"}:
+            raise ValueError("Salesforce object type must be Lead or Contact.")
+        if not record_id.strip():
+            raise ValueError("Salesforce record ID cannot be empty.")
+        if not fields:
+            raise ValueError("Salesforce record update fields cannot be empty.")
+        return self._request(
+            "PATCH",
+            f"/services/data/{self._api_version}/sobjects/{object_type}/{record_id}",
+            json=fields,
+        )
+
     def _query_object(
         self,
         object_type: str,
@@ -209,6 +224,8 @@ class SalesforceClient:
                 response.status_code,
                 response.text[:500] or "Salesforce returned an error.",
             )
+        if response.status_code == 204:
+            return {}
         try:
             return response.json()
         except ValueError as exc:

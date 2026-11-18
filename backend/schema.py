@@ -202,3 +202,41 @@ class CRMSyncResponse(BaseModel):
     records_created: int
     records_updated: int
     records_failed: int
+# Module 5: Conversation Intelligence & Interaction Schemas
+# =========================================================
+
+class InteractionSummarizeRequest(BaseModel):
+    lead_id: Optional[int] = None
+    interaction_type: Literal["meeting", "call", "email", "note"] = "meeting"
+    subject: Optional[str] = None
+    transcript_text: str = Field(..., min_length=1)
+    occurred_at: Optional[datetime] = None
+    connection_id: Optional[int] = None
+    provider_activity_id: Optional[str] = None
+    preferred_provider: Optional[str] = None
+
+
+class SalesInteractionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    interaction_id: int
+    lead_id: Optional[int] = None
+    connection_id: Optional[int] = None
+    provider_activity_id: Optional[str] = None
+    interaction_type: str
+    occurred_at: datetime
+    subject: Optional[str] = None
+    transcript_text: Optional[str] = None
+    transcript_ref: Optional[str] = None
+    summary: Optional[str] = None
+    discussion_points: Optional[List[str]] = None
+    action_items: Optional[List[Dict[str, Any]]] = None
+    risks: Optional[List[str]] = None
+    next_step: Optional[str] = None
+    processing_status: str
+    ai_provider: Optional[str] = None
+    ai_model: Optional[str] = None
+    input_tokens: Optional[int] = None
+    output_tokens: Optional[int] = None
+    error_message: Optional[str] = None
+    created_at: datetime

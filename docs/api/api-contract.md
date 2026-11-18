@@ -93,6 +93,11 @@ conversion probability as `lead_score * 0.85`, capped to `0..100`.
 | `POST` | `/api/crm/hubspot/sync` | CRM | Pull HubSpot contacts and upsert local leads/CRM identities | `200` |
 | `POST` | `/api/crm/salesforce/test` | CRM | Validate Salesforce client-credentials access and supported object | `200` |
 | `POST` | `/api/crm/salesforce/sync` | CRM | Pull Salesforce Leads or Contacts and upsert local leads/CRM identities | `200` |
+| `POST` | `/api/leads/{lead_id}/crm/{provider}/sync` | CRM | Push a synchronized lead's current fields to HubSpot or Salesforce | `200` |
+| `POST` | `/api/interactions/summarize` | Conversation Intelligence | Summarize meeting/call transcript and persist interaction | `201` |
+| `GET` | `/api/leads/{lead_id}/interactions` | Conversation Intelligence | Read all summarized interactions for a lead | `200` |
+| `GET` | `/api/interactions` | Conversation Intelligence | List all summarized sales interactions | `200` |
+| `GET` | `/api/interactions/{interaction_id}` | Conversation Intelligence | Read one summarized interaction | `200` |
 
 ## 4. System and users
 
@@ -649,7 +654,88 @@ Reports configuration and the most recently used provider:
 Availability is determined by the backend's configured credentials/connectivity.
 Do not expose provider secrets or use this endpoint as an authorization check.
 
-## 10. Client integration examples
+## 10. Conversation intelligence & meeting summarization
+
+Module 5 provides automated analysis of verbatim sales transcripts, meeting notes,
+and customer interaction logs. The service extracts concise executive summaries,
+structured discussion points, action items (with owner and due dates), deal risks,
+and strategic next steps, persisting them to `sales_interactions`.
+
+### `POST /api/interactions/summarize`
+
+Accepts a transcript, optional lead identifier, and metadata:
+
+```json
+{
+  "lead_id": 101,
+  "interaction_type": "meeting",
+  "subject": "CloudPulse Architecture Deep Dive",
+  "transcript_text": "[00:00] Alex: Hello David... [01:20] David: Our main issue is 4-hour latency...",
+  "preferred_provider": "gemini"
+}
+```
+
+Returns `201 Created` with the persisted `SalesInteraction` record:
+
+```json
+{
+  "interaction_id": 1,
+  "lead_id": 101,
+  "connection_id": null,
+  "provider_activity_id": null,
+  "interaction_type": "meeting",
+  "occurred_at": "2026-11-17T10:00:00Z",
+  "subject": "CloudPulse Architecture Deep Dive",
+  "summary": "Completed discovery sync with David Vance at CloudPulse. Evaluated 4-hour pipeline reconciliation lag between Kafka and Snowflake...",
+  "discussion_points": [
+    "Kafka ingestion is stable but Snowflake reconciliation lags by 4 hours",
+    "Customer success and rev ops forecasting on stale metrics",
+    "Requirement for zero-ETL connector deployment"
+  ],
+  "action_items": [
+    {
+      "task": "Deliver staging connector documentation and security whitepaper",
+      "owner": "Account Executive",
+      "due_date": "This afternoon"
+    },
+    {
+      "task": "Schedule technical deep dive with platform architect",
+      "owner": "Account Executive",
+      "due_date": "Next Thursday at 2 PM"
+    }
+  ],
+  "risks": [
+    "Engineering cycles constrained; cannot build custom ETL"
+  ],
+  "next_step": "Send staging connector docs and invite Sarah Miller to Thursday deep dive.",
+  "processing_status": "completed",
+  "ai_provider": "Google Gemini (gemini-1.5-pro)",
+  "ai_model": "gemini-1.5-pro",
+  "input_tokens": 340,
+  "output_tokens": 185,
+  "error_message": null,
+  "created_at": "2026-11-17T10:05:00Z"
+}
+```
+
+### `GET /api/leads/{lead_id}/interactions`
+
+Returns all summarized interaction records for a specific lead, ordered by recency.
+
+### `GET /api/interactions`
+
+Query parameters:
+- `limit` (default: 50)
+- `offset` (default: 0)
+- `interaction_type` (`meeting`, `call`, `email`, `note`)
+
+Returns a paginated list of interaction summaries across all accounts.
+
+### `GET /api/interactions/{interaction_id}`
+
+Returns the full details and audit metadata for one interaction.
+
+## 11. Client integration examples
 
 ```bash
 # Create a lead

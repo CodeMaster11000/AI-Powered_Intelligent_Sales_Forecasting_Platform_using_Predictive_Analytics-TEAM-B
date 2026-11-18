@@ -63,6 +63,28 @@ def test_hubspot_client_reports_provider_errors():
     assert "invalid token" in str(error.value)
 
 
+def test_hubspot_client_updates_contact():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "PATCH"
+        assert request.url.path.endswith("/crm/v3/objects/contacts/42")
+        assert request.read() == b'{"properties":{"company":"Example Corp"}}'
+        return httpx.Response(200, json={"id": "42"}, request=request)
+
+    client = HubSpotClient(
+        "test-token",
+        client=httpx.Client(
+            transport=httpx.MockTransport(handler),
+            base_url="https://api.hubapi.com/",
+        ),
+    )
+    try:
+        result = client.update_contact("42", {"company": "Example Corp"})
+    finally:
+        client.close()
+
+    assert result == {"id": "42"}
+
+
 def test_map_hubspot_contact_normalizes_salesgenie_fields():
     mapped = map_hubspot_contact(
         {

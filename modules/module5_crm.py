@@ -35,6 +35,22 @@ SALESFORCE_STATUS_MAP = {
     "closed won": "Closed Won",
 }
 
+HUBSPOT_STATUS_REVERSE_MAP = {
+    "New Leads": "NEW",
+    "Qualified": "QUALIFIED",
+    "Proposal": "OPPORTUNITY",
+    "Negotiation": "OPPORTUNITY",
+    "Closed Won": "CUSTOMER",
+}
+
+SALESFORCE_STATUS_REVERSE_MAP = {
+    "New Leads": "New",
+    "Qualified": "Qualified",
+    "Proposal": "Proposal",
+    "Negotiation": "Negotiation",
+    "Closed Won": "Closed Won",
+}
+
 
 def map_hubspot_contact(contact: dict[str, Any]) -> dict[str, Any]:
     properties = contact.get("properties") or {}
@@ -104,6 +120,140 @@ def get_or_create_hubspot_connection(db: Session) -> CRMConnection:
 
 def test_hubspot_connection(client: HubSpotClient) -> dict[str, Any]:
     return client.test_connection()
+
+
+def map_lead_to_hubspot_properties(lead: Lead) -> dict[str, Any]:
+    first_name, _, last_name = (lead.contact_name or "").partition(" ")
+    return {
+        "email": lead.email,
+        "firstname": first_name or None,
+        "lastname": last_name or None,
+        "company": lead.company_name,
+        "jobtitle": lead.contact_title,
+        "phone": lead.phone,
+        "industry": lead.industry,
+        "hs_lead_status": HUBSPOT_STATUS_REVERSE_MAP.get(lead.lead_status, "NEW"),
+        "numberofemployees": lead.company_size,
+        "annualrevenue": lead.annual_revenue,
+        "city": (lead.location or "").split(",", 1)[0].strip() or None,
+        "state": (lead.location or "").split(",", 1)[1].strip()
+        if "," in (lead.location or "")
+        else None,
+    }
+
+
+def map_lead_to_salesforce_fields(lead: Lead) -> dict[str, Any]:
+    first_name, _, last_name = (lead.contact_name or "").partition(" ")
+    fields = {
+        "FirstName": first_name or None,
+        "LastName": last_name or None,
+        "Email": lead.email,
+        "Company": lead.company_name,
+        "Title": lead.contact_title,
+        "Phone": lead.phone,
+        "Industry": lead.industry,
+        "Status": SALESFORCE_STATUS_REVERSE_MAP.get(lead.lead_status, "New"),
+        "NumberOfEmployees": lead.company_size,
+        "AnnualRevenue": lead.annual_revenue,
+    }
+    if lead.location and "," in lead.location:
+        fields["City"], fields["State"] = (
+            part.strip() for part in lead.location.split(",", 1)
+        )
+    return fields
+
+
+def push_lead_to_crm(
+    db: Session,
+    lead_id: int,
+    provider: str,
+    client: HubSpotClient | SalesforceClient,
+) -> dict[str, Any]:
+    provider = provider.lower()
+    if provider not in {"hubspot", "salesforce"}:
+        raise ValueError("provider must be hubspot or salesforce.")
+
+    lead = db.get(Lead, lead_id)
+    if not lead:
+        raise LookupError(f"Lead with id {lead_id} not found")
+
+    connection = db.execute(
+        select(CRMConnection).where(
+            CRMConnection.provider == provider,
+            CRMConnection.account_identifier == "environment",
+        )
+    ).scalars().first()
+    if not connection:
+        raise ValueError(f"No {provider} CRM connection has been synchronized yet.")
+
+    if provider == "hubspot":
+        object_types = ("contact",)
+    else:
+        object_types = ("contact", "lead")
+    record = db.execute(
+        select(CRMRecord)
+        .where(
+            CRMRecord.connection_id == connection.connection_id,
+            CRMRecord.lead_id == lead_id,
+            CRMRecord.object_type.in_(object_types),
+        )
+        .order_by(CRMRecord.record_id.asc())
+    ).scalars().first()
+    if not record:
+        raise ValueError(
+            f"Lead {lead_id} has no synchronized {provider} record to update."
+        )
+    object_type = record.object_type
+
+    run_id = str(uuid4())
+    sync_log = CRMSyncLog(
+        connection=connection,
+        sync_run_id=run_id,
+        operation="push",
+        object_type=object_type,
+        internal_record_id=lead_id,
+        external_record_id=record.provider_record_id,
+    )
+    db.add(sync_log)
+    db.flush()
+
+    try:
+        if provider == "hubspot":
+            payload = map_lead_to_hubspot_properties(lead)
+            response = client.update_contact(record.provider_record_id, payload)
+        else:
+            payload = map_lead_to_salesforce_fields(lead)
+            response = client.update_record(
+                "Contact" if object_type == "contact" else "Lead",
+                record.provider_record_id,
+                payload,
+            )
+        now = datetime.now(timezone.utc)
+        record.provider_payload = {**(record.provider_payload or {}), **response}
+        record.sync_state = "synced"
+        record.last_synced_at = now
+        sync_log.status = "succeeded"
+        sync_log.records_read = 1
+        sync_log.records_updated = 1
+        sync_log.completed_at = now
+        db.commit()
+        return {
+            "sync_run_id": run_id,
+            "status": "succeeded",
+            "records_read": 1,
+            "records_created": 0,
+            "records_updated": 1,
+            "records_failed": 0,
+        }
+    except (HubSpotAPIError, SalesforceAPIError):
+        sync_log.status = "failed"
+        sync_log.records_failed = 1
+        sync_log.completed_at = datetime.now(timezone.utc)
+        db.commit()
+        raise
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise RuntimeError(f"{provider} CRM write-back failed: {exc}") from exc
 
 
 def sync_hubspot_contacts(

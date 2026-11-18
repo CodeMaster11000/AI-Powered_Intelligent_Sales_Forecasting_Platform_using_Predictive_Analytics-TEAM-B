@@ -1,9 +1,9 @@
 from datetime import datetime, timezone
-from typing import Literal
+from typing import Literal, Optional
 from fastapi import Depends, FastAPI, HTTPException, Query, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from backend.database.database import get_db
@@ -13,6 +13,10 @@ from backend.database.models.lead_analysis_runs import LeadAnalysisRun
 from backend.database.models.leads import Lead
 from backend.database.models.outreach_emails import OutreachEmail
 from backend.database.models.users import User
+from backend.database.models.crm_connections import CRMConnection
+from backend.database.models.crm_records import CRMRecord
+from backend.database.models.crm_sync_logs import CRMSyncLog
+from backend.database.models.sales_interactions import SalesInteraction
 from backend.crm.hubspot_client import HubSpotAPIError, build_hubspot_client
 from backend.crm.salesforce_client import (
     SalesforceAPIError,
@@ -36,6 +40,8 @@ from backend.schema import (
     CRMConnectionTestResponse,
     CRMSyncRequest,
     CRMSyncResponse,
+    InteractionSummarizeRequest,
+    SalesInteractionResponse,
 )
 from modules.module1_leads import (
     bulk_import_leads,
@@ -56,10 +62,17 @@ from modules.module2_intelligence import (
 from modules.module3_outreach import generate_personalized_email
 from modules.module4_scoring import generate_next_best_action
 from modules.module5_crm import (
+    push_lead_to_crm,
     sync_hubspot_contacts,
     sync_salesforce_leads,
     test_hubspot_connection,
     test_salesforce_connection,
+)
+from modules.module5_conversation import (
+    summarize_and_store_interaction,
+    get_lead_interactions,
+    get_interaction_by_id,
+    list_interactions,
 )
 
 app = FastAPI(title="SalesGenie AI Core API", version="1.0.0")
@@ -140,6 +153,92 @@ def sync_salesforce(req: CRMSyncRequest, db: Session = Depends(get_db)):
         response_status = exc.status_code if exc.status_code == 424 else 502
         raise HTTPException(status_code=response_status, detail=str(exc)) from exc
     except (RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get(
+    "/api/crm/records",
+    tags=["CRM"],
+)
+def list_crm_records(
+    provider: str | None = Query(None),
+    search: str | None = Query(None),
+    limit: int = Query(500, ge=1, le=2000),
+    db: Session = Depends(get_db),
+):
+    """Combined CRM contact/lead view with internal lead and sync metadata."""
+    query = (
+        select(CRMRecord, CRMConnection, Lead)
+        .join(CRMConnection, CRMConnection.connection_id == CRMRecord.connection_id)
+        .outerjoin(Lead, Lead.lead_id == CRMRecord.lead_id)
+    )
+    if provider:
+        normalized = provider.lower()
+        if normalized not in {"hubspot", "salesforce"}:
+            raise HTTPException(status_code=400, detail="provider must be hubspot or salesforce")
+        query = query.where(CRMConnection.provider == normalized)
+    if search:
+        term = f"%{search.strip().lower()}%"
+        query = query.where(or_(
+            func.lower(Lead.company_name).like(term),
+            func.lower(Lead.contact_name).like(term),
+            func.lower(Lead.email).like(term),
+            func.lower(CRMRecord.provider_record_id).like(term),
+        ))
+    query = query.order_by(CRMRecord.updated_at.desc()).limit(limit)
+
+    rows = db.execute(query).all()
+    result = []
+    for record, connection, lead in rows:
+        interaction_count = db.scalar(
+            select(func.count())
+            .select_from(SalesInteraction)
+            .where(SalesInteraction.lead_id == record.lead_id)
+        ) if record.lead_id else 0
+        result.append({
+            "record_id": record.record_id,
+            "provider": connection.provider,
+            "object_type": record.object_type,
+            "provider_record_id": record.provider_record_id,
+            "sync_state": record.sync_state,
+            "last_synced_at": record.last_synced_at,
+            "lead_id": record.lead_id,
+            "company_name": lead.company_name if lead else None,
+            "contact_name": lead.contact_name if lead else None,
+            "contact_title": lead.contact_title if lead else None,
+            "email": lead.email if lead else None,
+            "phone": lead.phone if lead else None,
+            "lead_status": lead.lead_status if lead else None,
+            "interaction_count": interaction_count,
+            "provider_payload": record.provider_payload,
+        })
+    return result
+
+
+@app.post(
+    "/api/leads/{lead_id}/crm/{provider}/sync",
+    response_model=CRMSyncResponse,
+    tags=["CRM"],
+)
+def push_lead_to_crm_endpoint(
+    lead_id: int,
+    provider: Literal["hubspot", "salesforce"],
+    db: Session = Depends(get_db),
+):
+    """Write the current lead fields back to an existing provider record."""
+    try:
+        if provider == "hubspot":
+            with build_hubspot_client() as client:
+                return push_lead_to_crm(db, lead_id, provider, client)
+        with build_salesforce_client() as client:
+            return push_lead_to_crm(db, lead_id, provider, client)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (HubSpotAPIError, SalesforceAPIError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
@@ -650,3 +749,90 @@ def send_outreach_email(req: SendOutreachRequest, db: Session = Depends(get_db))
 def get_llm_providers():
     from backend.ai_agents.llm_client import llm_client
     return llm_client.get_available_providers()
+
+
+# --- CONVERSATION INTELLIGENCE & INTERACTION SUMMARIZATION (MODULE 5) ---
+@app.post(
+    "/api/interactions/summarize",
+    response_model=SalesInteractionResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["Conversation Intelligence"],
+)
+def summarize_interaction_endpoint(
+    req: InteractionSummarizeRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Analyzes meeting/call transcripts using the Multi-LLM Conversation Agent,
+    extracts summary, discussion points, action items, risks, and next steps,
+    and commits the record to the sales_interactions repository.
+    """
+    if req.lead_id is not None:
+        lead = db.get(Lead, req.lead_id)
+        if not lead:
+            raise HTTPException(status_code=404, detail=f"Lead with id {req.lead_id} not found")
+
+    try:
+        interaction = summarize_and_store_interaction(
+            db=db,
+            transcript_text=req.transcript_text,
+            lead_id=req.lead_id,
+            interaction_type=req.interaction_type,
+            subject=req.subject,
+            occurred_at=req.occurred_at,
+            connection_id=req.connection_id,
+            provider_activity_id=req.provider_activity_id,
+            preferred_provider=req.preferred_provider,
+        )
+        return interaction
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Conversation summarization failed: {str(e)}")
+
+
+@app.get(
+    "/api/leads/{lead_id}/interactions",
+    response_model=list[SalesInteractionResponse],
+    tags=["Conversation Intelligence"],
+)
+def get_lead_interactions_endpoint(
+    lead_id: int,
+    db: Session = Depends(get_db),
+):
+    """Returns all summarized sales interactions and call logs for a specific lead."""
+    lead = db.get(Lead, lead_id)
+    if not lead:
+        raise HTTPException(status_code=404, detail=f"Lead with id {lead_id} not found")
+    return get_lead_interactions(db, lead_id)
+
+
+@app.get(
+    "/api/interactions",
+    response_model=list[SalesInteractionResponse],
+    tags=["Conversation Intelligence"],
+)
+def list_interactions_endpoint(
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    interaction_type: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Returns paginated list of all summarized sales interactions across all accounts."""
+    return list_interactions(db, limit=limit, offset=offset, interaction_type=interaction_type)
+
+
+@app.get(
+    "/api/interactions/{interaction_id}",
+    response_model=SalesInteractionResponse,
+    tags=["Conversation Intelligence"],
+)
+def get_interaction_details_endpoint(
+    interaction_id: int,
+    db: Session = Depends(get_db),
+):
+    """Returns detailed summary, action items, risks, and audit metrics for an interaction."""
+    interaction = get_interaction_by_id(db, interaction_id)
+    if not interaction:
+        raise HTTPException(status_code=404, detail=f"Interaction with id {interaction_id} not found")
+    return interaction
