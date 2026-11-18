@@ -1,9 +1,10 @@
 import pytest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 from datetime import datetime, timezone
 from fastapi.testclient import TestClient
 
 from backend.main import app
+from backend.database.database import get_db
 from backend.database.models.leads import Lead
 from backend.database.models.sales_interactions import SalesInteraction
 from backend.ai_agents.conversation_agent import (
@@ -147,8 +148,13 @@ def test_api_summarize_interaction_endpoint():
         tech_stack=["HubSpot", "Postgres"],
     )
     db_mock.get.return_value = lead
+    db_mock.refresh.side_effect = lambda interaction: (
+        setattr(interaction, "interaction_id", 99),
+        setattr(interaction, "created_at", datetime.now(timezone.utc)),
+    )
 
-    with patch("backend.main.get_db", return_value=db_mock):
+    app.dependency_overrides[get_db] = lambda: db_mock
+    try:
         payload = {
             "lead_id": 5,
             "interaction_type": "meeting",
@@ -164,3 +170,5 @@ def test_api_summarize_interaction_endpoint():
         assert "summary" in data
         assert "discussion_points" in data
         assert "action_items" in data
+    finally:
+        app.dependency_overrides.clear()

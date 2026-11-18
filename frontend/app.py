@@ -25,6 +25,7 @@ from frontend.components.manual_form import render_manual_form  # noqa: E402
 from frontend.components.outreach_studio import render_outreach_studio  # noqa: E402
 from frontend.components.scoring_hub import render_scoring_hub  # noqa: E402
 from frontend.components.staging_feed import render_staging_feed  # noqa: E402
+from frontend.components.crm_conversations import render_crm_conversations  # noqa: E402
 from frontend.styles.themes import apply_theme  # noqa: E402
 
 NAV_DASHBOARD = "📈 Dashboard"
@@ -32,7 +33,8 @@ NAV_LEADS = "📊 Leads & Ingestion"
 NAV_INTEL = "🧠 AI Lead Intelligence"
 NAV_SCORING = "⚡ Predictive Scoring"
 NAV_OUTREACH = "✉️ Cold Outreach"
-TABS = [NAV_DASHBOARD, NAV_LEADS, NAV_INTEL, NAV_SCORING, NAV_OUTREACH]
+NAV_CRM = "🔗 CRM & Calls"
+TABS = [NAV_DASHBOARD, NAV_LEADS, NAV_INTEL, NAV_SCORING, NAV_OUTREACH, NAV_CRM]
 
 # ---- session defaults ------------------------------------------------------
 st.session_state.setdefault("theme_mode", "dark")
@@ -67,3 +69,5 @@ elif active == NAV_SCORING:
     render_scoring_hub()
 elif active == NAV_OUTREACH:
     render_outreach_studio()
+elif active == NAV_CRM:
+    render_crm_conversations()

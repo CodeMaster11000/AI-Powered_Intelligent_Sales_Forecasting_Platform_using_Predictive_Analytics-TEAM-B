@@ -104,6 +104,17 @@ class HubSpotClient:
             after = page.next_after
         return contacts[:max_records]
 
+    def update_contact(self, contact_id: str, properties: dict[str, Any]) -> dict[str, Any]:
+        if not contact_id.strip():
+            raise ValueError("HubSpot contact ID cannot be empty.")
+        if not properties:
+            raise ValueError("HubSpot contact update properties cannot be empty.")
+        return self._request(
+            "PATCH",
+            f"crm/v3/objects/contacts/{contact_id}",
+            json={"properties": properties},
+        )
+
     def _request(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
         try:
             response = self._http.request(method, path, **kwargs)
@@ -113,6 +124,8 @@ class HubSpotClient:
         if response.is_error:
             detail = response.text[:500] or "HubSpot returned an error."
             raise HubSpotAPIError(response.status_code, detail)
+        if response.status_code == 204:
+            return {}
         try:
             return response.json()
         except ValueError as exc:

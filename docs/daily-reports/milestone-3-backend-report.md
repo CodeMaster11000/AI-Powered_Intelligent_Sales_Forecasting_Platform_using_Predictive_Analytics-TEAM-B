@@ -425,7 +425,8 @@ batch sizes bounded to reduce provider rate-limit risk and simplify recovery.
 
 ### Current limitations
 
-1. CRM support is pull-only; outbound CRM updates are not implemented.
+1. CRM write-back currently covers synchronized lead/contact fields; custom
+   provider fields and additional CRM objects are not yet mapped.
 2. Webhook/event ingestion is not implemented.
 3. Activity synchronization and transcript processing are represented in the
    schema but not exposed as completed routes.
@@ -444,7 +445,8 @@ batch sizes bounded to reduce provider rate-limit risk and simplify recovery.
 2. Add connection-management endpoints backed by a secret manager.
 3. Add scheduled and resumable background synchronization with retry policy.
 4. Add CRM activity/webhook ingestion and deduplication.
-5. Add outbound field mapping and CRM write-back.
+5. Extend outbound field mapping and CRM write-back to additional objects and
+   provider-specific custom fields.
 6. Add sync-status and interaction-history read endpoints.
 7. Add integration tests against disposable CRM fixtures or provider sandboxes.
 8. Add external email delivery and delivery-status tracking.

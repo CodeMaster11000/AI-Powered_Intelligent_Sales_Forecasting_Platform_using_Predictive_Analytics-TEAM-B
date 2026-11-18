@@ -76,6 +76,28 @@ def test_salesforce_client_reports_authentication_failure():
     assert "invalid client" in str(error.value)
 
 
+def test_salesforce_client_updates_record():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "PATCH"
+        assert request.url.path.endswith("/sobjects/Lead/00Q123")
+        assert request.headers["Authorization"].startswith("Bearer ")
+        return httpx.Response(204, request=request)
+
+    client = SalesforceClient(
+        "consumer-key",
+        "consumer-secret",
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    client._access_token = "access-token"
+    client._instance_url = "https://example.salesforce.com"
+    try:
+        result = client.update_record("Lead", "00Q123", {"Company": "Example Corp"})
+    finally:
+        client.close()
+
+    assert result == {}
+
+
 def test_salesforce_client_falls_back_to_contacts_when_leads_are_unavailable():
     queries: list[str] = []
 

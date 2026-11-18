@@ -202,8 +202,6 @@ class CRMSyncResponse(BaseModel):
     records_created: int
     records_updated: int
     records_failed: int
-
-
 # Module 5: Conversation Intelligence & Interaction Schemas
 # =========================================================
 
@@ -228,6 +226,8 @@ class SalesInteractionResponse(BaseModel):
     interaction_type: str
     occurred_at: datetime
     subject: Optional[str] = None
+    transcript_text: Optional[str] = None
+    transcript_ref: Optional[str] = None
     summary: Optional[str] = None
     discussion_points: Optional[List[str]] = None
     action_items: Optional[List[Dict[str, Any]]] = None
@@ -240,4 +240,3 @@ class SalesInteractionResponse(BaseModel):
     output_tokens: Optional[int] = None
     error_message: Optional[str] = None
     created_at: datetime
-

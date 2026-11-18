@@ -93,6 +93,7 @@ conversion probability as `lead_score * 0.85`, capped to `0..100`.
 | `POST` | `/api/crm/hubspot/sync` | CRM | Pull HubSpot contacts and upsert local leads/CRM identities | `200` |
 | `POST` | `/api/crm/salesforce/test` | CRM | Validate Salesforce client-credentials access and supported object | `200` |
 | `POST` | `/api/crm/salesforce/sync` | CRM | Pull Salesforce Leads or Contacts and upsert local leads/CRM identities | `200` |
+| `POST` | `/api/leads/{lead_id}/crm/{provider}/sync` | CRM | Push a synchronized lead's current fields to HubSpot or Salesforce | `200` |
 | `POST` | `/api/interactions/summarize` | Conversation Intelligence | Summarize meeting/call transcript and persist interaction | `201` |
 | `GET` | `/api/leads/{lead_id}/interactions` | Conversation Intelligence | Read all summarized interactions for a lead | `200` |
 | `GET` | `/api/interactions` | Conversation Intelligence | List all summarized sales interactions | `200` |
