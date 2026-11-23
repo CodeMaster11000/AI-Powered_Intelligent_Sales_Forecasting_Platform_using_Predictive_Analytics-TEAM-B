@@ -1,8 +1,9 @@
 import httpx
 import pytest
+from unittest.mock import Mock
 
 from backend.crm.salesforce_client import SalesforceAPIError, SalesforceClient
-from modules.module5_crm import map_salesforce_lead
+from modules.module5_crm import map_salesforce_lead, sync_salesforce_leads
 
 
 def test_salesforce_client_authenticates_and_paginates():
@@ -163,3 +164,9 @@ def test_map_salesforce_lead_normalizes_salesgenie_fields():
 def test_map_salesforce_lead_rejects_leads_without_email():
     with pytest.raises(ValueError, match="has no email"):
         map_salesforce_lead({"Id": "00Q123", "Company": "Example Corp"})
+
+
+@pytest.mark.parametrize("max_records", [0, 5001, -1])
+def test_salesforce_sync_rejects_out_of_range_batch_sizes(max_records):
+    with pytest.raises(ValueError, match="between 1 and 5000"):
+        sync_salesforce_leads(Mock(), Mock(), max_records=max_records)

@@ -8,6 +8,27 @@ from backend.ai_agents.prompts import CONVERSATION_SUMMARIZER_SYSTEM_PROMPT
 logger = logging.getLogger(__name__)
 
 
+def _normalize_text_items(value: Any, fallback: Optional[List[str]] = None) -> List[str]:
+    if isinstance(value, str):
+        parts = [part.strip() for part in re.split(r"[\n;,]", value) if part.strip()]
+    elif isinstance(value, list):
+        parts = []
+        for item in value:
+            if isinstance(item, str) and item.strip():
+                parts.append(item.strip())
+            elif isinstance(item, dict):
+                for key in ("text", "point", "risk", "summary"):
+                    nested = item.get(key)
+                    if isinstance(nested, str) and nested.strip():
+                        parts.append(nested.strip())
+                        break
+    else:
+        parts = []
+
+    normalized = [part for part in parts if part]
+    return normalized or list(fallback or [])
+
+
 def summarize_sales_conversation(
     transcript_text: str,
     lead_context: Optional[Dict[str, Any]] = None,
@@ -91,10 +112,13 @@ def summarize_sales_conversation(
     if isinstance(raw_action_items, list):
         for item in raw_action_items:
             if isinstance(item, dict):
+                task = item.get("task")
+                owner = item.get("owner")
+                due_date = item.get("due_date")
                 normalized_action_items.append({
-                    "task": str(item.get("task", "Follow up")).strip(),
-                    "owner": str(item.get("owner", "Account Executive")).strip(),
-                    "due_date": str(item.get("due_date", "TBD")).strip(),
+                    "task": task.strip() if isinstance(task, str) and task.strip() else "Follow up",
+                    "owner": owner.strip() if isinstance(owner, str) and owner.strip() else "Account Executive",
+                    "due_date": due_date.strip() if isinstance(due_date, str) and due_date.strip() else "TBD",
                 })
             elif isinstance(item, str) and item.strip():
                 normalized_action_items.append({
@@ -103,18 +127,34 @@ def summarize_sales_conversation(
                     "due_date": "TBD",
                 })
 
-    raw_discussion_points = llm_output.get("discussion_points") or []
-    normalized_discussion_points = [
-        str(dp).strip() for dp in raw_discussion_points if str(dp).strip()
-    ]
+    fallback_for_lists = _build_local_conversation_summary(
+        transcript_text=transcript_text,
+        lead_context=lead_context,
+        interaction_type=interaction_type,
+        subject=subject,
+    )
+    normalized_discussion_points = _normalize_text_items(
+        llm_output.get("discussion_points"),
+        fallback_for_lists["discussion_points"],
+    )
 
-    raw_risks = llm_output.get("risks") or []
-    normalized_risks = [
-        str(r).strip() for r in raw_risks if str(r).strip()
-    ]
+    normalized_risks = _normalize_text_items(
+        llm_output.get("risks"),
+        fallback_for_lists["risks"],
+    )
 
-    summary_text = str(llm_output.get("summary", "")).strip()
-    next_step_text = str(llm_output.get("next_step", "")).strip()
+    summary_value = llm_output.get("summary")
+    summary_text = (
+        summary_value.strip()
+        if isinstance(summary_value, str)
+        else fallback_for_lists["summary"]
+    )
+    next_step_value = llm_output.get("next_step")
+    next_step_text = (
+        next_step_value.strip()
+        if isinstance(next_step_value, str)
+        else fallback_for_lists["next_step"]
+    )
 
     provider_name = llm_client.last_provider_used or "Deterministic Local Fallback"
     est_output_tokens = max(1, int(len((summary_text + " ".join(normalized_discussion_points)).split()) * 1.33))

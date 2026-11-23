@@ -1,9 +1,18 @@
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.database.models.leads import Lead
 from backend.database.models.users import User
 from backend.schema import BulkLeadImportRequest, BulkLeadImportResponse, LeadCreate, LeadUpdate
+
+
+class DuplicateLeadError(ValueError):
+    """Raised when an email is already associated with another lead."""
+
+
+def normalize_email(email: str) -> str:
+    return email.strip().lower()
 
 
 def seed_default_users(db: Session) -> list[User]:
@@ -46,13 +55,26 @@ def get_pipeline_stats(db: Session) -> dict:
 
 def create_single_lead(db: Session, lead_in: LeadCreate) -> Lead:
     """Creates a single lead record with email uniqueness check."""
-    existing = db.execute(select(Lead).where(Lead.email == lead_in.email)).scalar_one_or_none()
+    email = normalize_email(str(lead_in.email))
+    existing = db.execute(
+        select(Lead).where(func.lower(Lead.email) == email)
+    ).scalar_one_or_none()
     if existing:
-        raise ValueError(f"Lead with email '{lead_in.email}' already exists in database.")
+        raise DuplicateLeadError(
+            f"Lead with email '{email}' already exists in database."
+        )
 
-    db_lead = Lead(**lead_in.model_dump())
+    values = lead_in.model_dump()
+    values["email"] = email
+    db_lead = Lead(**values)
     db.add(db_lead)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise DuplicateLeadError(
+            f"Lead with email '{email}' already exists in database."
+        ) from exc
     db.refresh(db_lead)
     return db_lead
 
@@ -63,15 +85,29 @@ def update_single_lead(db: Session, lead_id: int, lead_in: LeadUpdate) -> Lead:
     if not db_lead:
         raise LookupError(f"Lead {lead_id} not found.")
 
+    email = normalize_email(str(lead_in.email))
     existing = db.execute(
-        select(Lead).where(Lead.email == lead_in.email, Lead.lead_id != lead_id)
+        select(Lead).where(
+            func.lower(Lead.email) == email,
+            Lead.lead_id != lead_id,
+        )
     ).scalar_one_or_none()
     if existing:
-        raise ValueError(f"Lead with email '{lead_in.email}' already exists in database.")
+        raise DuplicateLeadError(
+            f"Lead with email '{email}' already exists in database."
+        )
 
-    for field, value in lead_in.model_dump().items():
+    values = lead_in.model_dump()
+    values["email"] = email
+    for field, value in values.items():
         setattr(db_lead, field, value)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise DuplicateLeadError(
+            f"Lead with email '{email}' already exists in database."
+        ) from exc
     db.refresh(db_lead)
     return db_lead
 
@@ -93,11 +129,11 @@ def bulk_import_leads(db: Session, import_req: BulkLeadImportRequest) -> BulkLea
         return BulkLeadImportResponse(total_received=0, imported_count=0, skipped_duplicates=0)
 
     # Pre-fetch existing emails to avoid n-query roundtrips
-    incoming_emails = [lead.email.lower() for lead in import_req.leads]
+    incoming_emails = [normalize_email(str(lead.email)) for lead in import_req.leads]
     existing_emails_set = {
-        email.lower()
+        normalize_email(email)
         for email in db.execute(
-            select(Lead.email).where(Lead.email.in_(incoming_emails))
+            select(Lead.email).where(func.lower(Lead.email).in_(incoming_emails))
         ).scalars().all()
     }
 
@@ -106,20 +142,30 @@ def bulk_import_leads(db: Session, import_req: BulkLeadImportRequest) -> BulkLea
     seen_in_batch = set()
 
     for item in import_req.leads:
-        clean_email = item.email.lower()
+        clean_email = normalize_email(str(item.email))
         if clean_email in existing_emails_set or clean_email in seen_in_batch:
             if import_req.skip_duplicates:
                 skipped_count += 1
                 continue
             else:
-                raise ValueError(f"Duplicate email found in batch: {clean_email}")
+                raise DuplicateLeadError(
+                    f"Duplicate email found in batch: {clean_email}"
+                )
 
         seen_in_batch.add(clean_email)
-        imported_records.append(Lead(**item.model_dump()))
+        values = item.model_dump()
+        values["email"] = clean_email
+        imported_records.append(Lead(**values))
 
     if imported_records:
         db.add_all(imported_records)
-        db.commit()
+        try:
+            db.commit()
+        except IntegrityError as exc:
+            db.rollback()
+            raise DuplicateLeadError(
+                "One or more lead email addresses already exist in database."
+            ) from exc
 
     return BulkLeadImportResponse(
         total_received=total_received,

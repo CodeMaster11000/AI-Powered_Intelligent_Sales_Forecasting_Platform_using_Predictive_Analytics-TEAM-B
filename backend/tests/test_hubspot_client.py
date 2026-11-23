@@ -1,8 +1,9 @@
 import httpx
 import pytest
+from unittest.mock import Mock
 
 from backend.crm.hubspot_client import HubSpotAPIError, HubSpotClient
-from modules.module5_crm import map_hubspot_contact
+from modules.module5_crm import map_hubspot_contact, sync_hubspot_contacts
 
 
 def test_hubspot_client_paginates_contacts():
@@ -110,3 +111,9 @@ def test_map_hubspot_contact_normalizes_salesgenie_fields():
 def test_map_hubspot_contact_rejects_contacts_without_email():
     with pytest.raises(ValueError, match="has no email"):
         map_hubspot_contact({"id": "42", "properties": {}})
+
+
+@pytest.mark.parametrize("max_records", [0, 5001, -1])
+def test_hubspot_sync_rejects_out_of_range_batch_sizes(max_records):
+    with pytest.raises(ValueError, match="between 1 and 5000"):
+        sync_hubspot_contacts(Mock(), Mock(), max_records=max_records)

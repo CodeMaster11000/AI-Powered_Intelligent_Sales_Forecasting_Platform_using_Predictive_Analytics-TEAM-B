@@ -48,6 +48,15 @@ def test_create_single_lead_rejects_duplicate_email():
     db.commit.assert_not_called()
 
 
+def test_create_single_lead_normalizes_email_before_persisting():
+    db = Mock()
+    db.execute.return_value = db_result()
+
+    created = create_single_lead(db, lead_payload(" BUYER@EXAMPLE.COM "))
+
+    assert created.email == "buyer@example.com"
+
+
 def test_update_single_lead_persists_changes_and_allows_same_email():
     db = Mock()
     existing = Mock(lead_id=7)

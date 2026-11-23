@@ -7,6 +7,7 @@ from backend.main import app
 from backend.database.database import get_db
 from backend.database.models.leads import Lead
 from backend.database.models.sales_interactions import SalesInteraction
+import backend.ai_agents.conversation_agent as conversation_agent
 from backend.ai_agents.conversation_agent import (
     summarize_sales_conversation,
     _build_local_conversation_summary,
@@ -170,5 +171,121 @@ def test_api_summarize_interaction_endpoint():
         assert "summary" in data
         assert "discussion_points" in data
         assert "action_items" in data
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_summarize_normalizes_string_and_mixed_llm_output(monkeypatch):
+    monkeypatch.setattr(
+        conversation_agent.llm_client,
+        "generate_json",
+        lambda **kwargs: {
+            "summary": "Discovery meeting summary",
+            "discussion_points": "4-hour latency; engineering bandwidth",
+            "action_items": [
+                "Send staging documentation",
+                {"task": "Schedule deep dive", "owner": "Account Executive", "due_date": "Thursday"},
+                {"task": {"raw": "invalid"}, "owner": {"raw": "invalid"}},
+            ],
+            "risks": [{"text": "Custom ETL would delay rollout"}],
+            "next_step": "Confirm the technical deep dive",
+        },
+    )
+
+    result = summarize_sales_conversation(
+        transcript_text=SAMPLE_TRANSCRIPT,
+        lead_context={"company_name": "CloudPulse", "contact_name": "David Vance"},
+    )
+
+    assert result["discussion_points"] == [
+        "4-hour latency",
+        "engineering bandwidth",
+    ]
+    assert result["risks"] == ["Custom ETL would delay rollout"]
+    assert result["action_items"][0] == {
+        "task": "Send staging documentation",
+        "owner": "Account Executive",
+        "due_date": "TBD",
+    }
+    assert result["action_items"][2]["task"] == "Follow up"
+    assert result["summary"] == "Discovery meeting summary"
+
+
+def test_summarize_replaces_non_text_summary_and_next_step(monkeypatch):
+    monkeypatch.setattr(
+        conversation_agent.llm_client,
+        "generate_json",
+        lambda **kwargs: {
+            "summary": {"raw": "not a summary"},
+            "discussion_points": [],
+            "action_items": [],
+            "risks": [],
+            "next_step": ["raw", "not", "text"],
+        },
+    )
+
+    result = summarize_sales_conversation(
+        transcript_text=SAMPLE_TRANSCRIPT,
+        lead_context={"company_name": "CloudPulse", "contact_name": "David Vance"},
+    )
+
+    assert isinstance(result["summary"], str)
+    assert len(result["summary"]) > 20
+    assert isinstance(result["next_step"], str)
+    assert len(result["next_step"]) > 0
+
+
+def test_module5_service_persists_failed_processing_record(monkeypatch):
+    db = Mock()
+    db.get.return_value = None
+
+    def refresh_failed(interaction):
+        interaction.interaction_id = 100
+
+    db.refresh.side_effect = refresh_failed
+    monkeypatch.setattr(
+        "modules.module5_conversation.summarize_sales_conversation",
+        Mock(side_effect=RuntimeError("provider unavailable")),
+    )
+
+    with pytest.raises(RuntimeError, match="provider unavailable"):
+        summarize_and_store_interaction(
+            db=db,
+            transcript_text=SAMPLE_TRANSCRIPT,
+            lead_id=None,
+            interaction_type="call",
+        )
+
+    failed = db.add.call_args.args[0]
+    assert isinstance(failed, SalesInteraction)
+    assert failed.processing_status == "failed"
+    assert failed.error_message == "provider unavailable"
+    assert db.commit.called
+
+
+def test_api_rejects_empty_transcript():
+    res = client.post(
+        "/api/interactions/summarize",
+        json={"interaction_type": "meeting", "transcript_text": ""},
+    )
+
+    assert res.status_code == 422
+
+
+def test_api_rejects_unknown_lead():
+    db_mock = Mock()
+    db_mock.get.return_value = None
+    app.dependency_overrides[get_db] = lambda: db_mock
+    try:
+        res = client.post(
+            "/api/interactions/summarize",
+            json={
+                "lead_id": 999,
+                "interaction_type": "call",
+                "transcript_text": "Customer requested a follow-up.",
+            },
+        )
+        assert res.status_code == 404
+        assert "999" in res.json()["detail"]
     finally:
         app.dependency_overrides.clear()

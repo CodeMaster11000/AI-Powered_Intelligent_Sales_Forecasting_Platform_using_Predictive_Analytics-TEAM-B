@@ -44,6 +44,7 @@ from backend.schema import (
     SalesInteractionResponse,
 )
 from modules.module1_leads import (
+    DuplicateLeadError,
     bulk_import_leads,
     create_single_lead,
     delete_single_lead,
@@ -86,6 +87,18 @@ app.add_middleware(
 )
 
 
+def crm_http_exception(exc: HubSpotAPIError | SalesforceAPIError) -> HTTPException:
+    """Expose actionable client errors while translating upstream failures safely."""
+    provider_status = exc.status_code
+    if provider_status in {400, 401, 403, 404, 409, 422, 429, 503}:
+        response_status = provider_status
+    elif 500 <= provider_status < 600:
+        response_status = 502
+    else:
+        response_status = 502
+    return HTTPException(status_code=response_status, detail=str(exc))
+
+
 # --- SYSTEM & USERS ---
 @app.get("/health", tags=["System"])
 def health_check():
@@ -103,8 +116,10 @@ def test_hubspot():
             result = test_hubspot_connection(client)
         return {"provider": "hubspot", **result}
     except HubSpotAPIError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-    except (RuntimeError, ValueError) as exc:
+        raise crm_http_exception(exc) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
@@ -118,8 +133,10 @@ def sync_hubspot(req: CRMSyncRequest, db: Session = Depends(get_db)):
         with build_hubspot_client() as client:
             return sync_hubspot_contacts(db, client, max_records=req.max_records)
     except HubSpotAPIError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-    except (RuntimeError, ValueError) as exc:
+        raise crm_http_exception(exc) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
@@ -134,9 +151,12 @@ def test_salesforce():
             result = test_salesforce_connection(client)
         return {"provider": "salesforce", **result}
     except SalesforceAPIError as exc:
-        response_status = exc.status_code if exc.status_code == 424 else 502
-        raise HTTPException(status_code=response_status, detail=str(exc)) from exc
-    except (RuntimeError, ValueError) as exc:
+        if exc.status_code == 424:
+            raise HTTPException(status_code=424, detail=str(exc)) from exc
+        raise crm_http_exception(exc) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
@@ -150,9 +170,98 @@ def sync_salesforce(req: CRMSyncRequest, db: Session = Depends(get_db)):
         with build_salesforce_client() as client:
             return sync_salesforce_leads(db, client, max_records=req.max_records)
     except SalesforceAPIError as exc:
-        response_status = exc.status_code if exc.status_code == 424 else 502
-        raise HTTPException(status_code=response_status, detail=str(exc)) from exc
-    except (RuntimeError, ValueError) as exc:
+        if exc.status_code == 424:
+            raise HTTPException(status_code=424, detail=str(exc)) from exc
+        raise crm_http_exception(exc) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get(
+    "/api/crm/records",
+    tags=["CRM"],
+)
+def list_crm_records(
+    provider: str | None = Query(None),
+    search: str | None = Query(None),
+    limit: int = Query(500, ge=1, le=2000),
+    db: Session = Depends(get_db),
+):
+    """Combined CRM contact/lead view with internal lead and sync metadata."""
+    query = (
+        select(CRMRecord, CRMConnection, Lead)
+        .join(CRMConnection, CRMConnection.connection_id == CRMRecord.connection_id)
+        .outerjoin(Lead, Lead.lead_id == CRMRecord.lead_id)
+    )
+    if provider:
+        normalized = provider.lower()
+        if normalized not in {"hubspot", "salesforce"}:
+            raise HTTPException(status_code=400, detail="provider must be hubspot or salesforce")
+        query = query.where(CRMConnection.provider == normalized)
+    if search:
+        term = f"%{search.strip().lower()}%"
+        query = query.where(or_(
+            func.lower(Lead.company_name).like(term),
+            func.lower(Lead.contact_name).like(term),
+            func.lower(Lead.email).like(term),
+            func.lower(CRMRecord.provider_record_id).like(term),
+        ))
+    query = query.order_by(CRMRecord.updated_at.desc()).limit(limit)
+
+    rows = db.execute(query).all()
+    result = []
+    for record, connection, lead in rows:
+        interaction_count = db.scalar(
+            select(func.count())
+            .select_from(SalesInteraction)
+            .where(SalesInteraction.lead_id == record.lead_id)
+        ) if record.lead_id else 0
+        result.append({
+            "record_id": record.record_id,
+            "provider": connection.provider,
+            "object_type": record.object_type,
+            "provider_record_id": record.provider_record_id,
+            "sync_state": record.sync_state,
+            "last_synced_at": record.last_synced_at,
+            "lead_id": record.lead_id,
+            "company_name": lead.company_name if lead else None,
+            "contact_name": lead.contact_name if lead else None,
+            "contact_title": lead.contact_title if lead else None,
+            "email": lead.email if lead else None,
+            "phone": lead.phone if lead else None,
+            "lead_status": lead.lead_status if lead else None,
+            "interaction_count": interaction_count,
+            "provider_payload": record.provider_payload,
+        })
+    return result
+
+
+@app.post(
+    "/api/leads/{lead_id}/crm/{provider}/sync",
+    response_model=CRMSyncResponse,
+    tags=["CRM"],
+)
+def push_lead_to_crm_endpoint(
+    lead_id: int,
+    provider: Literal["hubspot", "salesforce"],
+    db: Session = Depends(get_db),
+):
+    """Write the current lead fields back to an existing provider record."""
+    try:
+        if provider == "hubspot":
+            with build_hubspot_client() as client:
+                return push_lead_to_crm(db, lead_id, provider, client)
+        with build_salesforce_client() as client:
+            return push_lead_to_crm(db, lead_id, provider, client)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (HubSpotAPIError, SalesforceAPIError) as exc:
+        raise crm_http_exception(exc) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
@@ -257,8 +366,10 @@ def get_stats(db: Session = Depends(get_db)):
 def create_lead(lead_in: LeadCreate, db: Session = Depends(get_db)):
     try:
         return create_single_lead(db, lead_in)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except DuplicateLeadError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.put("/api/leads/{lead_id}", response_model=LeadResponse, tags=["Leads"])
@@ -267,6 +378,8 @@ def update_lead(lead_id: int, lead_in: LeadUpdate, db: Session = Depends(get_db)
         return update_single_lead(db, lead_id, lead_in)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except DuplicateLeadError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -284,8 +397,10 @@ def delete_lead(lead_id: int, db: Session = Depends(get_db)):
 def bulk_import(import_req: BulkLeadImportRequest, db: Session = Depends(get_db)):
     try:
         return bulk_import_leads(db, import_req)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except DuplicateLeadError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.get("/api/leads", response_model=list[LeadResponse], tags=["Leads"])

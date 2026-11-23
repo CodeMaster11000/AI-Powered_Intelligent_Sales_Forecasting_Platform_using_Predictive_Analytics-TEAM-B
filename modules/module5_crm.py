@@ -245,9 +245,12 @@ def push_lead_to_crm(
             "records_updated": 1,
             "records_failed": 0,
         }
-    except (HubSpotAPIError, SalesforceAPIError):
+    except (HubSpotAPIError, SalesforceAPIError) as exc:
+        record.sync_state = "error"
         sync_log.status = "failed"
         sync_log.records_failed = 1
+        sync_log.error_code = str(exc.status_code)
+        sync_log.error_message = str(exc)
         sync_log.completed_at = datetime.now(timezone.utc)
         db.commit()
         raise
@@ -356,8 +359,13 @@ def sync_hubspot_contacts(
             "records_updated": sync_log.records_updated,
             "records_failed": sync_log.records_failed,
         }
-    except HubSpotAPIError:
-        db.rollback()
+    except HubSpotAPIError as exc:
+        sync_log.status = "failed"
+        sync_log.records_failed = 1
+        sync_log.error_code = str(exc.status_code)
+        sync_log.error_message = str(exc)
+        sync_log.completed_at = datetime.now(timezone.utc)
+        db.commit()
         raise
     except SQLAlchemyError as exc:
         db.rollback()
@@ -528,8 +536,13 @@ def sync_salesforce_leads(
             "records_updated": sync_log.records_updated,
             "records_failed": sync_log.records_failed,
         }
-    except SalesforceAPIError:
-        db.rollback()
+    except SalesforceAPIError as exc:
+        sync_log.status = "failed"
+        sync_log.records_failed = 1
+        sync_log.error_code = str(exc.status_code)
+        sync_log.error_message = str(exc)
+        sync_log.completed_at = datetime.now(timezone.utc)
+        db.commit()
         raise
     except SQLAlchemyError as exc:
         db.rollback()
