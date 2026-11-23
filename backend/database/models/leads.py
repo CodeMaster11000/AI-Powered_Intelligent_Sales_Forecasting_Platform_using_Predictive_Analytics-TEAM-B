@@ -1,7 +1,16 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import (BigInteger, CheckConstraint, DateTime, ForeignKey, Identity, Text, func,)
+from sqlalchemy import (
+    BigInteger,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Identity,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -24,6 +33,7 @@ SOURCES = ("CRM", "Website Form", "LinkedIn", "Sales Entry", "CSV")
 class Lead(Base):
     __tablename__ = "leads"
     __table_args__ = (
+        UniqueConstraint("email", name="uq_leads_email"),
         CheckConstraint(
             "lead_status IN (" + ", ".join(f"'{s}'" for s in LEAD_STATUSES) + ")",
             name="ck_leads_lead_status",
