@@ -265,6 +265,92 @@ def push_lead_to_crm_endpoint(
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
+@app.get(
+    "/api/crm/records",
+    tags=["CRM"],
+)
+def list_crm_records(
+    provider: str | None = Query(None),
+    search: str | None = Query(None),
+    limit: int = Query(500, ge=1, le=2000),
+    db: Session = Depends(get_db),
+):
+    """Combined CRM contact/lead view with internal lead and sync metadata."""
+    query = (
+        select(CRMRecord, CRMConnection, Lead)
+        .join(CRMConnection, CRMConnection.connection_id == CRMRecord.connection_id)
+        .outerjoin(Lead, Lead.lead_id == CRMRecord.lead_id)
+    )
+    if provider:
+        normalized = provider.lower()
+        if normalized not in {"hubspot", "salesforce"}:
+            raise HTTPException(status_code=400, detail="provider must be hubspot or salesforce")
+        query = query.where(CRMConnection.provider == normalized)
+    if search:
+        term = f"%{search.strip().lower()}%"
+        query = query.where(or_(
+            func.lower(Lead.company_name).like(term),
+            func.lower(Lead.contact_name).like(term),
+            func.lower(Lead.email).like(term),
+            func.lower(CRMRecord.provider_record_id).like(term),
+        ))
+    query = query.order_by(CRMRecord.updated_at.desc()).limit(limit)
+
+    rows = db.execute(query).all()
+    result = []
+    for record, connection, lead in rows:
+        interaction_count = db.scalar(
+            select(func.count())
+            .select_from(SalesInteraction)
+            .where(SalesInteraction.lead_id == record.lead_id)
+        ) if record.lead_id else 0
+        result.append({
+            "record_id": record.record_id,
+            "provider": connection.provider,
+            "object_type": record.object_type,
+            "provider_record_id": record.provider_record_id,
+            "sync_state": record.sync_state,
+            "last_synced_at": record.last_synced_at,
+            "lead_id": record.lead_id,
+            "company_name": lead.company_name if lead else None,
+            "contact_name": lead.contact_name if lead else None,
+            "contact_title": lead.contact_title if lead else None,
+            "email": lead.email if lead else None,
+            "phone": lead.phone if lead else None,
+            "lead_status": lead.lead_status if lead else None,
+            "interaction_count": interaction_count,
+            "provider_payload": record.provider_payload,
+        })
+    return result
+
+
+@app.post(
+    "/api/leads/{lead_id}/crm/{provider}/sync",
+    response_model=CRMSyncResponse,
+    tags=["CRM"],
+)
+def push_lead_to_crm_endpoint(
+    lead_id: int,
+    provider: Literal["hubspot", "salesforce"],
+    db: Session = Depends(get_db),
+):
+    """Write the current lead fields back to an existing provider record."""
+    try:
+        if provider == "hubspot":
+            with build_hubspot_client() as client:
+                return push_lead_to_crm(db, lead_id, provider, client)
+        with build_salesforce_client() as client:
+            return push_lead_to_crm(db, lead_id, provider, client)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (HubSpotAPIError, SalesforceAPIError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
 @app.get("/api/users", response_model=list[UserResponse], tags=["Users"])
 def get_users(db: Session = Depends(get_db)):
     return seed_default_users(db)
